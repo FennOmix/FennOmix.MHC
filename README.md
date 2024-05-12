@@ -1,2 +1,2 @@
-# pDeepMHC
-Protein language model for MHC-binding peptide prediction
+# pDeep
+Deep learning for multi-dimensional proteomics

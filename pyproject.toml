@@ -3,7 +3,7 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pdeep_mhc"
+name = "pdeep"
 version = "0.0.1"
 dependencies = [
   "alphabase",
@@ -16,10 +16,10 @@ authors = [
 maintainers = [
   {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"}
 ]
-description = "pDeep MHC model"
+description = "pDeep"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
-keywords = ["deep learning", "protein language model", "immunopeptidomics", "MHC"]
+keywords = ["deep learning", "protein language model", "proteomics", "multi-dimensional proteomics"]
 classifiers = [
   "Development Status :: 1 - Planning",
   "Programming Language :: Python"
@@ -34,18 +34,18 @@ cli = [
 [project.urls]
 Homepage = "https://fennomix.com"
 Documentation = "https://readthedocs.org"
-Repository = "https://github.com/FennOmix/pDeepMHC.git"
-"Bug Tracker" = "https://github.com/FennOmix/pDeepMHC/issues"
-Changelog = "https://github.com/FennOmix/pDeepMHC/blob/main/CHANGELOG.md"
+Repository = "https://github.com/FennOmix/pdeep.git"
+"Bug Tracker" = "https://github.com/FennOmix/pdeep/issues"
+Changelog = "https://github.com/FennOmix/pdeep/blob/main/CHANGELOG.md"
 
 # [project.scripts]
-# pdeep_mhc = "pdeep_mhc:main_cli"
+# pdeep = "pdeep:main_cli"
 
 # [project.gui-scripts]
-# pdeep_mhc-gui = "pdeep_mhc:main_gui"
+# pdeep-gui = "pdeep:main_gui"
 
-[project.entry-points."pdeep_mhc"]
-pdeep_mhc = "pdeep_mhc:main"
+[project.entry-points."pdeep"]
+pdeep = "pdeep:main"
 
 [tool.setuptools]
 py-modules = []
