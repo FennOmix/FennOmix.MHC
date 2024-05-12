@@ -1,0 +1,4 @@
+recursive-include pdeep_mhc *
+include LICENSE.txt
+include README.md
+recursive-exclude pdeep_mhc/logs *

@@ -1,2 +1,2 @@
-# pDeepHLA
-Protein language model for HLA-binding peptide prediction
+# pDeepMHC
+Protein language model for MHC-binding peptide prediction
