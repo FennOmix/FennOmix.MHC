@@ -1,16 +1,13 @@
 import torch
-import pandas as pd
 import numpy as np
-import os
 import random
-import pickle
 import tqdm
 
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 
 from peptdeep.utils import logging, get_available_device
-from mhc_utils import NonSpecificDigest
+from .mhc_utils import NonSpecificDigest
 
 from peptdeep.model.building_block import (
     Hidden_HFace_Transformer,
