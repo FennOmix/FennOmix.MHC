@@ -245,7 +245,7 @@ class MHCBindingRetriever:
         return df
     
     def get_binding_metrics_for_self_proteins(
-        self, alleles, fdr=0.02, 
+        self, alleles, dist_threshold=0, fdr=0.02,
         cdist_batch_size=1000000,
         embed_batch_size=1024,
         get_sequence=True,
@@ -298,7 +298,11 @@ class MHCBindingRetriever:
                 outlier_thredhold=self.outlier_threshold,
                 fmm_fdr=self.use_fmm_fdr
             )
-        idxes = best_allele_fdrs<=fdr
+        if dist_threshold > 0:
+            idxes = best_allele_idxes >= dist_threshold
+        else:
+            idxes = best_allele_fdrs<=fdr
+
         df = pd.DataFrame(dict(
             best_allele_id=best_allele_idxes[idxes],
             best_allele_dist=best_allele_dists[idxes],
