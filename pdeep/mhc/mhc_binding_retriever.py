@@ -298,10 +298,7 @@ class MHCBindingRetriever:
                 outlier_thredhold=self.outlier_threshold,
                 fmm_fdr=self.use_fmm_fdr
             )
-        if dist_threshold > 0:
-            idxes = best_allele_idxes >= dist_threshold
-        else:
-            idxes = best_allele_fdrs<=fdr
+        idxes = (best_allele_dists <= dist_threshold) & (best_allele_fdrs <= fdr)
 
         df = pd.DataFrame(dict(
             best_allele_id=best_allele_idxes[idxes],
