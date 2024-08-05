@@ -6,7 +6,7 @@ import tqdm
 
 from peptdeep.utils import get_device
 
-from mhc_binding_model import (
+from pdeep.mhc.mhc_binding_model import (
     embed_hla_esm_list, 
     embed_peptides,
     HlaDataSet,
@@ -298,7 +298,8 @@ class MHCBindingRetriever:
                 outlier_thredhold=self.outlier_threshold,
                 fmm_fdr=self.use_fmm_fdr
             )
-        idxes = best_allele_fdrs<=fdr
+        idxes = (best_allele_dists <= dist_threshold) & (best_allele_fdrs <= fdr)
+
         df = pd.DataFrame(dict(
             best_allele_id=best_allele_idxes[idxes],
             best_allele_dist=best_allele_dists[idxes],
