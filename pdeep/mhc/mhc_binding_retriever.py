@@ -6,7 +6,7 @@ import tqdm
 
 from peptdeep.utils import get_device
 
-from mhc_binding_model import (
+from pdeep.mhc.mhc_binding_model import (
     embed_hla_esm_list, 
     embed_peptides,
     HlaDataSet,

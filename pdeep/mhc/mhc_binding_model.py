@@ -268,7 +268,7 @@ def embed_peptides(
         if verbose:
             batches = tqdm.tqdm(batches)
         for i in batches:
-            x = get_ascii_indices(seqs[i:i+batch_size]).to("cuda")
+            x = get_ascii_indices(seqs[i:i+batch_size]).to(device)
             embeds[i:i+batch_size,:] = pept_encoder(x).detach().cpu().numpy()
     torch.cuda.empty_cache()
     return embeds

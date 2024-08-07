@@ -122,8 +122,8 @@ def plot_motif_multi_mer(df, allele_col, allele, kmers, axes=None, logo_scale=20
 def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
     motif_df = count_motif_bits(df, allele_col, allele, kmer, logo_scale=logo_scale)
     logo_plot = lm.Logo(
-        motif_df, font_name = 'Arial', 
-        color_scheme='chemistry', 
+        motif_df, font_name = 'DejaVu Sans',
+        color_scheme='chemistry',
         ax=ax,
     )
     logo_plot.style_xticks(anchor=0, spacing=1, rotation=0)
