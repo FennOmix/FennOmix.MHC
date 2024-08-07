@@ -2,6 +2,7 @@ import umap
 import pandas as pd
 import numpy as np
 import logomaker as lm
+from sklearn.manifold import MDS, TSNE
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -43,9 +44,23 @@ def transform_embeds_to_umap_df(hla_reducer, embeds, alleles):
     df["allele"] = alleles
     return df
 
+def transform_matrix_to_mds_df(matrix, labels, seed):
+    mds = MDS(n_components=2, random_state=seed, dissimilarity='precomputed', normalized_stress='auto')
+    embedding = mds.fit_transform(matrix)
+    df = pd.DataFrame(embedding, columns=("MDS1","MDS2"))
+    df["label"] = labels
+    return df
+
+def transform_embeds_to_tSNE_df(embeds, labels, seed):
+    tsne = TSNE(n_components=2, random_state=seed, perplexity=30, learning_rate=200, n_iter=1000)
+    embedding = tsne.fit_transform(embeds)
+    df = pd.DataFrame(embedding, columns=("t-SNE 1","t-SNE 2"))
+    df["label"] = labels
+    return df
+
 def plot_umap_df(
         df:pd.DataFrame, color_col, hover_col, 
-        size=1, jump_color=True,
+        size=1, jump_color=True, image_width=700, image_height=600,
         save_as=""
     ):
     factors = df[color_col].drop_duplicates().to_list()
@@ -59,7 +74,7 @@ def plot_umap_df(
         df, x="UMAP1", y="UMAP2", 
         color=color_col, hover_data=[hover_col],
         color_discrete_map=color_mapping,
-        width=700, height=600, template="plotly_white",
+        width=image_width, height=image_height, template="plotly_white",
     )
     fig.update_traces(marker=dict(size=size))
     fig.update_layout(
@@ -143,3 +158,38 @@ def adjust_axes(logo_plots, max_y):
         else:
             logos.ax.set_ylim(top=max_y)
             break
+
+def select_optimal_a_cover(a_to_b_map, uncovered_b, coverage_threshold, max_a_elements):
+
+    total_b = len(uncovered_b)
+    selected_a = set()
+    current_coverage = 0.0
+    selected_count = 0
+
+    while current_coverage < coverage_threshold and selected_count < max_a_elements:
+        best_a = None
+        best_coverage_count = 0
+
+        for a, b_set in a_to_b_map.items():
+            if a in selected_a:
+                continue
+
+            cover_count = sum(1 for b in b_set if b in uncovered_b)
+
+            if cover_count > best_coverage_count:
+                best_a = a
+                best_coverage_count = cover_count
+
+        if best_a is not None:
+            selected_a.add(best_a)
+            selected_count += 1
+
+            for b in a_to_b_map[best_a]:
+                if b in uncovered_b:
+                    uncovered_b.remove(b)
+
+            current_coverage = 1.0 - len(uncovered_b) / total_b
+        else:
+            break
+
+    return selected_a
