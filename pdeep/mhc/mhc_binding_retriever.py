@@ -6,13 +6,13 @@ import tqdm
 
 from peptdeep.utils import get_device
 
-from pdeep.mhc.mhc_binding_model import (
+from .mhc_binding_model import (
     embed_hla_esm_list, 
     embed_peptides,
     HlaDataSet,
 )
 
-from tda_fmm import TDA_fmm, DecoyModel, select_best_fmm
+from .tda_fmm import TDA_fmm, DecoyModel, select_best_fmm
 
 @numba.njit
 def get_fdrs(dists, rnd_dists, alpha, remove_rnd_top_rank=0.01):
