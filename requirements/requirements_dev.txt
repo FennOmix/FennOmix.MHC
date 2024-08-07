@@ -1,0 +1,20 @@
+pre-commit
+jupyter
+jupyter_contrib_nbextensions
+pyinstaller
+
+twine
+bumpversion
+pipdeptree
+ipykernel
+psutil
+
+pywin32; sys_platform=='win32'
+
+#docs
+autodocsumm
+sphinx-rtd-theme
+nbsphinx
+myst_parser
+sphinx_design
+furo

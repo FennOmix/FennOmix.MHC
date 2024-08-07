@@ -4,19 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdeep"
-version = "0.0.1"
-dependencies = [
-  "alphabase",
-  "peptdeep",
-  "pydivsufsort",
-  "pre-commit",
-]
 requires-python = ">=3.8"
+dynamic = ["version", "dependencies", "optional-dependencies"]
+
 authors = [
-  {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"},
+  {name = "FennOmix Lab", email = "zengwenfeng@westlake.edu.cn"},
 ]
 maintainers = [
-  {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"}
+  {name = "FennOmix Lab", email = "zengwenfeng@westlake.edu.cn"}
 ]
 description = "pDeep"
 readme = "README.md"
@@ -41,13 +36,16 @@ classifiers = [
 #     "Topic :: Scientific/Engineering :: Bio-Informatics",
 # ]
 
-[project.optional-dependencies]
-gui = ["streamlit"]
-cli = [
-  "click",
-]
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements/requirements_loose.txt"]}
+optional-dependencies = { stable = { file = ["requirements/requirements.txt",
+] }, test = { file = [ "requirements/requirements_test.txt",
+] }, dev = { file = ["requirements/requirements_dev.txt", "requirements/requirements_test.txt",
+] }}
+version = {attr = "pdeep.__version__"}
 
 [project.urls]
+version = "0.0.1"
 Homepage = "https://fennomix.com"
 Documentation = "https://readthedocs.org"
 Repository = "https://github.com/FennOmix/pdeep.git"
