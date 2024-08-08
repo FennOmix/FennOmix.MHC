@@ -1,24 +1,22 @@
-import numpy as np
-import torch
 import numba
+import numpy as np
 import pandas as pd
+import torch
 import tqdm
-
 from peptdeep.utils import get_device
 
 from .mhc_binding_model import (
-    embed_hla_esm_list, 
-    embed_peptides,
     HlaDataSet,
+    embed_peptides,
 )
+from .tda_fmm import DecoyModel, select_best_fmm
 
-from .tda_fmm import TDA_fmm, DecoyModel, select_best_fmm
 
 @numba.njit
 def get_fdrs(dists, rnd_dists, alpha, remove_rnd_top_rank=0.01):
     sorted_idxes = np.argsort(dists)
     sorted_rnd = np.argsort(rnd_dists)
-    still_binder_rnd_idx = int(remove_rnd_top_rank*len(rnd_dists))
+    still_binder_rnd_idx = int(remove_rnd_top_rank * len(rnd_dists))
 
     fdrs = np.zeros_like(dists)
 
@@ -28,9 +26,10 @@ def get_fdrs(dists, rnd_dists, alpha, remove_rnd_top_rank=0.01):
             j += 1
         if j > still_binder_rnd_idx:
             # do we need D+1 correction?
-            fdrs[idx] = (alpha*(j-still_binder_rnd_idx))/(idx+1) 
-        
+            fdrs[idx] = (alpha * (j - still_binder_rnd_idx)) / (idx + 1)
+
     return fdrs
+
 
 @numba.njit
 def get_q_values(fdrs, distances):
@@ -43,9 +42,11 @@ def get_q_values(fdrs, distances):
             min_pep = fdrs[idx]
     return fdrs
 
+
 def get_binding_fdrs(
-    distances_1D:np.ndarray, decoys_1D:np.ndarray,
-    max_fitting_samples=200000, 
+    distances_1D: np.ndarray,
+    decoys_1D: np.ndarray,
+    max_fitting_samples=200000,
     random_state=1337,
     outlier_thredhold=0.01,
     fmm_fdr=False,
@@ -55,78 +56,85 @@ def get_binding_fdrs(
         decoy_fmm.fit(decoys_1D)
         if len(distances_1D) >= max_fitting_samples:
             np.random.seed(random_state)
-            target_fmm = select_best_fmm(np.random.choice(
-                distances_1D, max_fitting_samples, replace=False
-            ), decoy_fmm, verbose=True)
+            target_fmm = select_best_fmm(
+                np.random.choice(distances_1D, max_fitting_samples, replace=False),
+                decoy_fmm,
+                verbose=True,
+            )
         else:
             target_fmm = select_best_fmm(distances_1D, decoy_fmm, verbose=True)
-        
+
         # target_fmm.plot("test", distances, decoy_fmm.data)
         print(f"Estimated pi0 = {target_fmm.get_pi0()}")
         peps = target_fmm.pep(distances_1D)
         peps = get_q_values(peps, distances_1D)
         sorted_idxes = np.argsort(distances_1D)
-        sorted_fdrs = np.cumsum(peps[sorted_idxes]) / np.arange(1, len(peps)+1)
+        sorted_fdrs = np.cumsum(peps[sorted_idxes]) / np.arange(1, len(peps) + 1)
         fdrs = np.zeros_like(peps)
         fdrs[sorted_idxes] = sorted_fdrs
     else:
-        alpha = 1.0*len(distances_1D)/len(decoys_1D)
+        alpha = 1.0 * len(distances_1D) / len(decoys_1D)
         fdrs = get_fdrs(
-            distances_1D, decoys_1D, alpha, 
-            remove_rnd_top_rank=outlier_thredhold
+            distances_1D, decoys_1D, alpha, remove_rnd_top_rank=outlier_thredhold
         )
 
     fdrs = get_q_values(fdrs, distances_1D)
     return fdrs
 
+
 def get_binding_fdr_for_best_allele(
-    distances:np.ndarray, rnd_dist:np.ndarray,
-    outlier_threshold = 0.01,
-    fmm_fdr = False,
+    distances: np.ndarray,
+    rnd_dist: np.ndarray,
+    outlier_threshold=0.01,
+    fmm_fdr=False,
 ):
     best_allele_idxes = np.argmin(distances, axis=1)
-    min_allele_distances = distances[np.arange(len(best_allele_idxes)), best_allele_idxes]
+    min_allele_distances = distances[
+        np.arange(len(best_allele_idxes)), best_allele_idxes
+    ]
     best_allele_fdrs = np.zeros(len(best_allele_idxes))
     # best_allele_peps = np.zeros_like(best_allele_fdrs)
 
     for i in range(distances.shape[-1]):
-        selected_alleles = best_allele_idxes==i
+        selected_alleles = best_allele_idxes == i
         fdrs = get_binding_fdrs(
-            min_allele_distances[selected_alleles], 
-            rnd_dist[:,i], fmm_fdr=fmm_fdr,
+            min_allele_distances[selected_alleles],
+            rnd_dist[:, i],
+            fmm_fdr=fmm_fdr,
             outlier_thredhold=outlier_threshold,
         )
         # best_allele_peps[selected_alleles] = peps
         best_allele_fdrs[selected_alleles] = fdrs
     return best_allele_fdrs
 
+
 @numba.njit
-def get_binding_ranks(distances:np.ndarray, sorted_rnd_dist:np.ndarray):
+def get_binding_ranks(distances: np.ndarray, sorted_rnd_dist: np.ndarray):
     best_allele_idxes = np.argmin(distances, axis=1)
     best_allele_ranks = np.zeros(len(best_allele_idxes))
     len_rnd = float(sorted_rnd_dist.shape[0])
     for i, allele_idx in enumerate(best_allele_idxes):
-        rank = np.searchsorted(
-            sorted_rnd_dist[:,allele_idx], distances[i,allele_idx]
-        )
-        best_allele_ranks[i] = rank/len_rnd*100
+        rank = np.searchsorted(sorted_rnd_dist[:, allele_idx], distances[i, allele_idx])
+        best_allele_ranks[i] = rank / len_rnd * 100
     return best_allele_ranks
 
+
 class MHCBindingRetriever:
-    def __init__(self, 
-        hla_encoder, pept_encoder, 
-        hla_df, hla_embeds:np.ndarray, 
-        protein_data, digested_pept_lens=(8,14),
-        device="cuda"
+    def __init__(
+        self,
+        hla_encoder,
+        pept_encoder,
+        hla_df,
+        hla_embeds: np.ndarray,
+        protein_data,
+        digested_pept_lens=(8, 14),
+        device="cuda",
     ):
         self.hla_encoder = hla_encoder
         self.pept_encoder = pept_encoder
         self.device = get_device(device)[0]
 
-        self.dataset = HlaDataSet(
-            hla_df, [], None, protein_data,
-            digested_pept_lens
-        )
+        self.dataset = HlaDataSet(hla_df, [], None, protein_data, digested_pept_lens)
         self.hla_embeds = hla_embeds
 
         self.n_decoy_samples = 5000
@@ -136,82 +144,71 @@ class MHCBindingRetriever:
         self.d_model = 480
         self.verbose = True
 
-    def get_embedding_distances(self,
-        prot_embeds:np.ndarray, 
-        pept_embeds:np.ndarray,
-        batch_size=1000000
+    def get_embedding_distances(
+        self, prot_embeds: np.ndarray, pept_embeds: np.ndarray, batch_size=1000000
     ):
-        ret_dists = np.zeros(
-            (len(pept_embeds),len(prot_embeds)), 
-            dtype=np.float32
-        )
-        prot_embeds = torch.tensor(
-            prot_embeds, device=self.device
-        )
+        ret_dists = np.zeros((len(pept_embeds), len(prot_embeds)), dtype=np.float32)
+        prot_embeds = torch.tensor(prot_embeds, device=self.device)
 
         for i in range(0, len(pept_embeds), batch_size):
-            _embeds = torch.tensor(
-                pept_embeds[i:i+batch_size],
-                device=self.device
+            _embeds = torch.tensor(pept_embeds[i : i + batch_size], device=self.device)
+            ret_dists[i : i + batch_size, :] = (
+                torch.cdist(
+                    _embeds.unsqueeze(0),
+                    prot_embeds.unsqueeze(0),
+                )
+                .squeeze(0)
+                .cpu()
+                .numpy()
             )
-            ret_dists[i:i+batch_size,:] = torch.cdist(
-                _embeds.unsqueeze(0),
-                prot_embeds.unsqueeze(0),
-            ).squeeze(0).cpu().numpy()
 
         return ret_dists
 
-    def get_binding_distances(self, 
-        prot_embeds:np.ndarray, 
-        peptide_list, 
+    def get_binding_distances(
+        self,
+        prot_embeds: np.ndarray,
+        peptide_list,
         cdist_batch_size=1000000,
         embed_batch_size=1024,
-    ):      
+    ):
         if isinstance(peptide_list, np.ndarray):
             peptide_list = peptide_list.astype("U")
-        
+
         pept_embeds = embed_peptides(
-            self.pept_encoder, peptide_list,
+            self.pept_encoder,
+            peptide_list,
             d_model=self.d_model,
             batch_size=embed_batch_size,
-            device=self.device
+            device=self.device,
         )
 
         return self.get_embedding_distances(
-            prot_embeds, pept_embeds,
+            prot_embeds,
+            pept_embeds,
             batch_size=cdist_batch_size,
         )
-    
+
     def _get_decoy_distances(self, prot_embeds):
         np.random.seed(self.decoy_rnd_seed)
-        rnd_pept_df = self.dataset.digest.get_random_pept_df(
-            self.n_decoy_samples
-        )
-        
+        rnd_pept_df = self.dataset.digest.get_random_pept_df(self.n_decoy_samples)
+
         rnd_dist = self.get_binding_distances(
-            prot_embeds,
-            rnd_pept_df.sequence.values.astype("U")
+            prot_embeds, rnd_pept_df.sequence.values.astype("U")
         )
         return np.sort(rnd_dist, axis=0)
-    
+
     def get_binding_metrics_for_embeds(
-        self, prot_embeds, peptide_list,
-        keep_not_best_alleles=False
+        self, prot_embeds, peptide_list, keep_not_best_alleles=False
     ):
         if len(prot_embeds.shape) == 1:
-            prot_embeds = prot_embeds[None,:]
+            prot_embeds = prot_embeds[None, :]
 
-        
         if isinstance(peptide_list, np.ndarray) and peptide_list.dtype == np.float32:
             has_seqs = False
-            dist = self.get_embedding_distances(
-                prot_embeds, peptide_list
-            )
+            dist = self.get_embedding_distances(prot_embeds, peptide_list)
         else:
             has_seqs = True
-            dist = self.get_binding_distances(
-                prot_embeds, peptide_list
-            )
+            dist = self.get_binding_distances(prot_embeds, peptide_list)
 
         rnd_dist = self._get_decoy_distances(prot_embeds)
 
@@ -220,32 +217,36 @@ class MHCBindingRetriever:
             np.arange(len(best_allele_idxes)), best_allele_idxes
         ]
 
-        best_allele_ranks = get_binding_ranks(
-            dist, rnd_dist
-        )
+        best_allele_ranks = get_binding_ranks(dist, rnd_dist)
 
         fdrs = get_binding_fdr_for_best_allele(
-            dist, rnd_dist, 
+            dist,
+            rnd_dist,
             outlier_threshold=self.outlier_threshold,
-            fmm_fdr=self.use_fmm_fdr
+            fmm_fdr=self.use_fmm_fdr,
         )
 
         _dict = {}
         if has_seqs:
             _dict["sequence"] = peptide_list
-        _dict.update({
-            "best_allele_id": best_allele_idxes, 
-            "best_allele_dist": min_allele_distances, 
-            "best_allele_rank": best_allele_ranks, 
-            "best_allele_fdr": fdrs,
-        })
+        _dict.update(
+            {
+                "best_allele_id": best_allele_idxes,
+                "best_allele_dist": min_allele_distances,
+                "best_allele_rank": best_allele_ranks,
+                "best_allele_fdr": fdrs,
+            }
+        )
         df = pd.DataFrame(_dict)
         if keep_not_best_alleles:
-            df.loc[:,list(range(prot_embeds.shape[0]))] = dist
+            df.loc[:, list(range(prot_embeds.shape[0]))] = dist
         return df
-    
+
     def get_binding_metrics_for_self_proteins(
-        self, alleles, dist_threshold=0, fdr=0.02,
+        self,
+        alleles,
+        dist_threshold=0,
+        fdr=0.02,
         cdist_batch_size=1000000,
         embed_batch_size=1024,
         get_sequence=True,
@@ -257,7 +258,7 @@ class MHCBindingRetriever:
         decoy_dists = self._get_decoy_distances(selected_embeds)
 
         best_allele_idxes = np.empty_like(
-            self.dataset.digest.digest_starts,dtype=np.int64
+            self.dataset.digest.digest_starts, dtype=np.int64
         )
         best_allele_dists = np.empty_like(best_allele_idxes, dtype=np.float32)
         best_allele_ranks = np.empty_like(best_allele_idxes, dtype=np.int32)
@@ -267,45 +268,49 @@ class MHCBindingRetriever:
         if self.verbose:
             batches = tqdm.tqdm(batches)
         for start_major in batches:
-            if start_major+cdist_batch_size >= len(best_allele_dists):
+            if start_major + cdist_batch_size >= len(best_allele_dists):
                 stop_major = len(best_allele_dists)
             else:
-                stop_major = start_major+cdist_batch_size
+                stop_major = start_major + cdist_batch_size
 
             peptide_list = self.dataset.digest.get_peptide_seqs_from_idxes(
                 np.arange(start_major, stop_major)
             )
 
             dist = self.get_binding_distances(
-                selected_embeds, peptide_list,
+                selected_embeds,
+                peptide_list,
                 cdist_batch_size=cdist_batch_size,
-                embed_batch_size=embed_batch_size
+                embed_batch_size=embed_batch_size,
             )
 
             best_allele_idxes[start_major:stop_major] = np.argmin(dist, axis=1)
             best_allele_dists[start_major:stop_major] = dist[
-                np.arange(stop_major-start_major), 
-                best_allele_idxes[start_major:stop_major]
+                np.arange(stop_major - start_major),
+                best_allele_idxes[start_major:stop_major],
             ]
 
             best_allele_ranks[start_major:stop_major] = get_binding_ranks(
                 dist, decoy_dists
             )
         for i in range(len(alleles)):
-            idxes = best_allele_idxes==i
+            idxes = best_allele_idxes == i
             best_allele_fdrs[idxes] = get_binding_fdrs(
-                best_allele_dists[idxes], decoy_dists[:,i],
+                best_allele_dists[idxes],
+                decoy_dists[:, i],
                 outlier_thredhold=self.outlier_threshold,
-                fmm_fdr=self.use_fmm_fdr
+                fmm_fdr=self.use_fmm_fdr,
             )
         idxes = (best_allele_dists <= dist_threshold) & (best_allele_fdrs <= fdr)
 
-        df = pd.DataFrame(dict(
-            best_allele_id=best_allele_idxes[idxes],
-            best_allele_dist=best_allele_dists[idxes],
-            best_allele_rank=best_allele_ranks[idxes],
-            best_allele_fdr=best_allele_fdrs[idxes],
-        ))
+        df = pd.DataFrame(
+            dict(
+                best_allele_id=best_allele_idxes[idxes],
+                best_allele_dist=best_allele_dists[idxes],
+                best_allele_rank=best_allele_ranks[idxes],
+                best_allele_fdr=best_allele_fdrs[idxes],
+            )
+        )
         if get_sequence:
             peptides = self.dataset.digest.get_peptide_seqs_from_idxes(
                 np.arange(len(best_allele_idxes))[idxes]
@@ -313,28 +318,22 @@ class MHCBindingRetriever:
             df["sequence"] = peptides
         else:
             df["peptide_id"] = np.arange(len(best_allele_idxes))[idxes]
-        
+
         return df
 
     def get_binding_metrics_for_peptides(
-        self, alleles, peptide_list,
-        keep_not_best_alleles=False
+        self, alleles, peptide_list, keep_not_best_alleles=False
     ):
         selected_embeds = self.hla_embeds[
             [self.dataset.allele_idxes_dict[allele][0] for allele in alleles]
         ].copy()
 
-        df = self.get_binding_metrics_for_embeds(
-            selected_embeds, peptide_list
-        )
+        df = self.get_binding_metrics_for_embeds(selected_embeds, peptide_list)
 
         if keep_not_best_alleles:
-            df.rename(columns=dict(
-                zip(list(range(len(alleles))), alleles)
-            ), inplace=True)
+            df.rename(
+                columns=dict(zip(list(range(len(alleles))), alleles)), inplace=True
+            )
         df["best_allele"] = df.best_allele_id.apply(lambda i: alleles[i])
-        
-        return df
-        
 
-    
+        return df

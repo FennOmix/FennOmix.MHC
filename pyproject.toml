@@ -9,6 +9,7 @@ dependencies = [
   "alphabase",
   "peptdeep",
   "pydivsufsort",
+  "pre-commit",
 ]
 requires-python = ">=3.8"
 authors = [
@@ -64,3 +65,24 @@ pdeep = "pdeep:main"
 
 [tool.setuptools]
 py-modules = []
+
+[tool.ruff.lint]
+select =  [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = [
+    "E501",  # Line too long  (ruff wraps code, but not docstrings)
+    "B028",  #  No explicit `stacklevel` keyword argument found (for warnings)
+    "B006", # Do not use mutable data structures for argument defaults # TODO: fix this!
+]
