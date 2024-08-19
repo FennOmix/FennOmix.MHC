@@ -54,14 +54,14 @@ Repository = "https://github.com/FennOmix/pdeep.git"
 "Bug Tracker" = "https://github.com/FennOmix/pdeep/issues"
 Changelog = "https://github.com/FennOmix/pdeep/blob/main/CHANGELOG.md"
 
-# [project.scripts]
-# pdeep = "pdeep:main_cli"
+[project.scripts]
+pdeep = "pdeep.cli:run"
 
 # [project.gui-scripts]
 # pdeep-gui = "pdeep:main_gui"
 
-[project.entry-points."pdeep"]
-pdeep = "pdeep:main"
+# [project.entry-points."pdeep"]
+# pdeep = "pdeep:main"
 
 [tool.setuptools]
 py-modules = []

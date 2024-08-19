@@ -1,4 +1,3 @@
-import os
 import random
 
 import numpy as np
@@ -273,27 +272,3 @@ def embed_peptides(
             embeds[i : i + batch_size, :] = pept_encoder(x).detach().cpu().numpy()
     torch.cuda.empty_cache()
     return embeds
-
-
-def get_model(model_version, device=""):
-    if not device:
-        device = get_available_device()[0]
-
-    hla_encoder = ModelHlaEncoder().to(device)
-    pept_encoder = ModelSeqEncoder().to(device)
-
-    hla_model_path = f"model/HLA_model_{model_version}.pt"
-    pept_model_path = f"model/pept_model_{model_version}.pt"
-
-    if not os.path.exists(hla_model_path):
-        raise FileNotFoundError(f"File not found: {hla_model_path}")
-    if not os.path.exists(pept_model_path):
-        raise FileNotFoundError(f"File not found: {pept_model_path}")
-
-    try:
-        hla_encoder.load_state_dict(torch.load(hla_model_path, map_location=device))
-        pept_encoder.load_state_dict(torch.load(pept_model_path, map_location=device))
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
-
-    return hla_encoder, pept_encoder
