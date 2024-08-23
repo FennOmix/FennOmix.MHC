@@ -10,15 +10,15 @@ import pandas as pd
 import torch
 import tqdm
 
-import pdeep
-from pdeep.mhc.mhc_binding_model import (
+import fennet
+from fennet.mhc.mhc_binding_model import (
     ModelHlaEncoder,
     ModelSeqEncoder,
     embed_hla_esm_list,
     embed_peptides,
 )
-from pdeep.mhc.mhc_binding_retriever import MHCBindingRetriever
-from pdeep.mhc.mhc_utils import NonSpecificDigest
+from fennet.mhc.mhc_binding_retriever import MHCBindingRetriever
+from fennet.mhc.mhc_utils import NonSpecificDigest
 
 
 @click.group(
@@ -26,7 +26,7 @@ from pdeep.mhc.mhc_utils import NonSpecificDigest
     invoke_without_command=True,
 )
 @click.pass_context
-@click.version_option(pdeep.__version__, "-v", "--version")
+@click.version_option(fennet.__version__, "-v", "--version")
 def run(ctx, **kwargs):
     click.echo(
         rf"""
@@ -37,9 +37,9 @@ def run(ctx, **kwargs):
                    | .__/|____/ \___|\___| .__/
                    |_|                   |_|
         ...................................................
-        .{pdeep.__version__.center(50)}.
-        .{pdeep.__github__.center(50)}.
-        .{pdeep.__license__.center(50)}.
+        .{fennet.__version__.center(50)}.
+        .{fennet.__github__.center(50)}.
+        .{fennet.__license__.center(50)}.
         ...................................................
         """
     )
@@ -59,7 +59,7 @@ def mhc(ctx, **kwargs):
         click.echo(mhc.get_help(ctx))
 
 
-@mhc.command("embed_proteins", help="Embed MHC proteins using pDeepMHC HLA encoder")
+@mhc.command("embed_proteins", help="Embed MHC proteins using FennetMHC HLA encoder")
 @click.option(
     "--fasta",
     type=click.Path(exists=True),
@@ -149,7 +149,7 @@ def embed_proteins(fasta, save_pkl, load_model_hla, device):
 
 @mhc.command(
     "embed_peptides_fasta",
-    help="Embed peptides from fasta using pDeepMHC peptide encoder",
+    help="Embed peptides from fasta using FennetMHC peptide encoder",
 )
 @click.option(
     "--fasta",
