@@ -3,13 +3,13 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pdeep"
+name = "fennet"
 version = "0.0.1"
 dependencies = [
   "alphabase",
   "peptdeep",
   "pydivsufsort",
-  "esm",
+  "fair-esm",
   "matplotlib",
   "pre-commit",
   "click",
@@ -21,7 +21,7 @@ authors = [
 maintainers = [
   {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"}
 ]
-description = "pDeep"
+description = "Fennet"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
 keywords = ["deep learning", "protein language model", "proteomics", "multi-dimensional proteomics"]
@@ -50,18 +50,18 @@ gui = ["streamlit"]
 [project.urls]
 Homepage = "https://fennomix.com"
 Documentation = "https://readthedocs.org"
-Repository = "https://github.com/FennOmix/pdeep.git"
-"Bug Tracker" = "https://github.com/FennOmix/pdeep/issues"
-Changelog = "https://github.com/FennOmix/pdeep/blob/main/CHANGELOG.md"
+Repository = "https://github.com/FennOmix/fennet.git"
+"Bug Tracker" = "https://github.com/FennOmix/fennet/issues"
+Changelog = "https://github.com/FennOmix/fennet/blob/main/CHANGELOG.md"
 
 [project.scripts]
-pdeep = "pdeep.cli:run"
+fennet = "fennet.cli:run"
 
 # [project.gui-scripts]
-# pdeep-gui = "pdeep:main_gui"
+# fennet-gui = "fennet:main_gui"
 
-# [project.entry-points."pdeep"]
-# pdeep = "pdeep:main"
+# [project.entry-points."fennet"]
+# fennet = "fennet:main"
 
 [tool.setuptools]
 py-modules = []
