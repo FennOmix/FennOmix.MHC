@@ -30,12 +30,11 @@ from fennet.mhc.mhc_utils import NonSpecificDigest
 def run(ctx, **kwargs):
     click.echo(
         rf"""
-                          ____
-                    _ __ |  _ \  ___  ___ _ __
-                   | '_ \| | | |/ _ \/ _ \ '_ \
-                   | |_) | |_| |  __/  __/ |_) |
-                   | .__/|____/ \___|\___| .__/
-                   |_|                   |_|
+                   _____                     _
+                  |  ___|__ _ __  _ __   ___| |_
+                  | |_ / _ \ '_ \| '_ \ / _ \ __|
+                  |  _|  __/ | | | | | |  __/ |_
+                  |_|  \___|_| |_|_| |_|\___|\__|
         ...................................................
         .{fennet.__version__.center(50)}.
         .{fennet.__github__.center(50)}.
@@ -64,13 +63,13 @@ def mhc(ctx, **kwargs):
     "--fasta",
     type=click.Path(exists=True),
     required=True,
-    help="Path to fasta file containing MHC class I protein sequences",
+    help="Path to fasta file containing MHC class I protein sequences.",
 )
 @click.option(
     "--save_pkl",
     type=click.Path(),
     required=True,
-    help="Path to .pkl Binary file for saving MHC protein embeddings",
+    help="Path to .pkl Binary file for saving MHC protein embeddings.",
 )
 @click.option(
     "--load_model_hla",
@@ -84,9 +83,13 @@ def mhc(ctx, **kwargs):
     type=click.Choice(["cpu", "cuda"]),
     default="cuda",
     show_default=True,
-    help="Device to use",
+    help="Device to use.",
 )
 def embed_proteins(fasta, save_pkl, load_model_hla, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        click.echo("CUDA not available. Change to use CPU")
+        device = "cpu"
+
     protein_id_list = []
     protein_seq_list = []
     with open(fasta) as f:
@@ -98,6 +101,10 @@ def embed_proteins(fasta, save_pkl, load_model_hla, device):
                 protein_seq_list.append("")
             else:
                 protein_seq_list[-1] += line
+    if (not protein_id_list) | (not protein_seq_list):
+        click.echo("No valid MHC protein sequences found in fasta file")
+        sys.exit(1)
+
     protein_df = pd.DataFrame({"allele": protein_id_list, "sequence": protein_seq_list})
 
     esm2_model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
@@ -155,13 +162,13 @@ def embed_proteins(fasta, save_pkl, load_model_hla, device):
     "--fasta",
     type=click.Path(exists=True),
     required=True,
-    help="Path to fasta file",
+    help="Path to fasta file.",
 )
 @click.option(
     "--save_pkl",
     type=click.Path(),
     required=True,
-    help="Path to .pkl Binary file for saving peptide embeddings",
+    help="Path to .pkl Binary file for saving peptide embeddings.",
 )
 @click.option(
     "--min_peptide_length",
@@ -189,15 +196,23 @@ def embed_proteins(fasta, save_pkl, load_model_hla, device):
     type=click.Choice(["cpu", "cuda"]),
     default="cuda",
     show_default=True,
-    help="Device to use",
+    help="Device to use.",
 )
 def embed_peptides_fasta(
     fasta, save_pkl, min_peptide_length, max_peptide_length, load_model_pept, device
 ):
+    if device == "cuda" and not torch.cuda.is_available():
+        click.echo("CUDA not available. Change to use CPU")
+        device = "cpu"
+
     pept_encoder = ModelSeqEncoder().to(device)
-    pept_encoder.load_state_dict(
-        torch.load(load_model_pept, weights_only=True, map_location=device)
-    )
+
+    try:
+        pept_encoder.load_state_dict(
+            torch.load(load_model_pept, weights_only=True, map_location=device)
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load model: {e}") from e
 
     digest = NonSpecificDigest(fasta, (min_peptide_length, max_peptide_length))
     total_peptides_num = len(digest.digest_starts)
@@ -242,12 +257,15 @@ def embed_peptides_fasta(
         )
 
 
-@mhc.command("embed_peptides_tsv", help="Embed peptides from given tsv")
+@mhc.command(
+    "embed_peptides_tsv",
+    help="Embed peptides from given tsv using FennetMHC peptide encoder",
+)
 @click.option(
     "--tsv",
     type=click.Path(exists=True),
-    default="",
-    help="Path to tsv file containing peptides list. (Mutually exclusive with the previous --fasta option, don't provide fasta file and tsv file at the same time)",
+    required=True,
+    help="Path to tsv file containing peptides list.)",
 )
 @click.option(
     "--save_pkl",
@@ -281,15 +299,23 @@ def embed_peptides_fasta(
     type=click.Choice(["cpu", "cuda"]),
     default="cuda",
     show_default=True,
-    help="Device to use",
+    help="Device to use.",
 )
 def embed_peptides_tsv(
     tsv, save_pkl, min_peptide_length, max_peptide_length, load_model_pept, device
 ):
+    if device == "cuda" and not torch.cuda.is_available():
+        click.echo("CUDA not available. Change to use CPU")
+        device = "cpu"
+
     pept_encoder = ModelSeqEncoder().to(device)
-    pept_encoder.load_state_dict(
-        torch.load(load_model_pept, weights_only=True, map_location=device)
-    )
+
+    try:
+        pept_encoder.load_state_dict(
+            torch.load(load_model_pept, weights_only=True, map_location=device)
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load model: {e}") from e
 
     input_peptide_df = pd.read_table(tsv, sep="\t", index_col=False)
     before_filter_num = input_peptide_df.shape[0]
@@ -348,7 +374,7 @@ def embed_peptides_tsv(
 @click.option(
     "--peptide_pkl",
     type=click.Path(exists=True),
-    help="Path to Peptide pre-embeddings file (.pkl)",
+    help="Path to Peptide pre-embeddings file (.pkl).",
 )
 @click.option(
     "--protein_pkl",
@@ -356,7 +382,7 @@ def embed_peptides_tsv(
     default="./embeds/hla_v0819_embeds.pkl",
     show_default=True,
     help="Path to MHC protein pre-embeddings file (.pkl), If the alleles you want do not exist in the our list, "
-    "you can provide the sequences yourself and use the *embed_proteins* function to generate custom protein pkl file",
+    "you can provide the sequences yourself and use the *embed_proteins* function to generate custom protein pkl file.",
 )
 @click.option(
     "--alleles",
@@ -365,11 +391,11 @@ def embed_peptides_tsv(
     help="List of MHC class I alleles, separated by commas. Example: A01_01,B07_02,C07_02.",
 )
 @click.option(
-    "--fasta",
+    "--human_protein_fasta",
     type=click.Path(exists=True),
     default="./uniprotkb_UP000005640_AND_reviewed_true_2024_03_01.fasta",
     show_default=True,
-    help="Path to human reviewed protein fasta file",
+    help="Path to human reviewed protein fasta file.",
 )
 @click.option(
     "--out-folder",
@@ -440,6 +466,18 @@ def predict_binding(
             pept_embeds = data_dict["pept_embeds"]
     except Exception as e:
         raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+
+    peptide_lengths = np.array([len(pep) for pep in peptide_list])
+    valid_indices = np.where(
+        (peptide_lengths >= min_peptide_length)
+        & (peptide_lengths <= max_peptide_length)
+    )[0]
+    peptide_list = [peptide_list[i] for i in valid_indices]
+    pept_embeds = pept_embeds[valid_indices, :]
+
+    if len(peptide_list) == 0:
+        click.echo("No valid peptide sequences")
+        sys.exit(1)
 
     # check input MHC protein source
     try:
@@ -587,6 +625,18 @@ def predict_binding_for_epitope(
             pept_embeds = data_dict["pept_embeds"]
     except Exception as e:
         raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+
+    peptide_lengths = np.array([len(pep) for pep in peptide_list])
+    valid_indices = np.where(
+        (peptide_lengths >= min_peptide_length)
+        & (peptide_lengths <= max_peptide_length)
+    )[0]
+    peptide_list = [peptide_list[i] for i in valid_indices]
+    pept_embeds = pept_embeds[valid_indices, :]
+
+    if len(peptide_list) == 0:
+        click.echo("No valid peptide sequences")
+        sys.exit(1)
 
     # check input MHC protein source
     try:
