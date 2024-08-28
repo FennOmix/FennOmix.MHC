@@ -445,11 +445,11 @@ def embed_peptides_tsv(
     show_default=True,
     help="Device to use",
 )
-def predict_binding(
+def predict_binding_for_MHC(
     peptide_pkl,
     protein_pkl,
     alleles,
-    fasta,
+    human_protein_fasta,
     out_folder,
     min_peptide_length,
     max_peptide_length,
@@ -524,7 +524,7 @@ def predict_binding(
         pept_encoder,
         protein_df,
         hla_embeds,
-        fasta,
+        human_protein_fasta,
         digested_pept_lens=(min_peptide_length, max_peptide_length),
     )
     peptide_df = retriever.get_binding_metrics_for_peptides(
@@ -559,7 +559,7 @@ def predict_binding(
     "you can provide the sequences yourself and use the *embed_proteins* function to generate custom protein pkl file",
 )
 @click.option(
-    "--fasta",
+    "--human_protein_fasta",
     type=click.Path(exists=True),
     default="./uniprotkb_UP000005640_AND_reviewed_true_2024_03_01.fasta",
     show_default=True,
@@ -609,7 +609,7 @@ def predict_binding(
 def predict_binding_for_epitope(
     peptide_pkl,
     protein_pkl,
-    fasta,
+    human_protein_fasta,
     out_folder,
     min_peptide_length,
     max_peptide_length,
@@ -672,7 +672,7 @@ def predict_binding_for_epitope(
         pept_encoder,
         protein_df,
         hla_embeds,
-        fasta,
+        human_protein_fasta,
         digested_pept_lens=(min_peptide_length, max_peptide_length),
     )
 
