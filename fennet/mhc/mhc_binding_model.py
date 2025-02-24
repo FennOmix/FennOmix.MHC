@@ -1,7 +1,7 @@
-import math
 import random
 
 import numpy as np
+import pandas as pd
 import torch
 import tqdm
 from peptdeep.model.building_block import (
@@ -10,8 +10,8 @@ from peptdeep.model.building_block import (
     SeqAttentionSum,
     ascii_embedding,
 )
+from peptdeep.model.model_interface import get_cosine_schedule_with_warmup
 from peptdeep.utils import get_available_device, logging
-from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 
@@ -20,54 +20,6 @@ from .mhc_utils import NonSpecificDigest
 random.seed(1337)
 np.random.seed(1337)
 torch.random.manual_seed(1337)
-
-
-# peptdeep has removed this function,
-# copy it here as a local method.
-def get_cosine_schedule_with_warmup(
-    optimizer: torch.optim.Optimizer,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_cycles: float = 0.5,
-    last_epoch: int = -1,
-) -> LambdaLR:
-    """
-    Create a learning rate schedule that linearly increases the learning rate from
-    0.0 to lr over num_warmup_steps, then decreases to 0.0 on a cosine schedule over
-    the remaining num_training_steps-num_warmup_steps (assuming num_cycles = 0.5).
-
-    This is based on the Hugging Face implementation
-    https://github.com/huggingface/transformers/blob/v4.23.1/src/transformers/optimization.py#L104.
-
-    Args:
-        optimizer (torch.optim.Optimizer): The optimizer for which to
-            schedule the learning rate.
-        num_warmup_steps (int): The number of steps for the warmup phase.
-        num_training_steps (int): The total number of training steps.
-        num_cycles (float): The number of waves in the cosine schedule. Defaults to 0.5
-            (decrease from the max value to 0 following a half-cosine).
-        last_epoch (int): The index of the last epoch when resuming training. Defaults to -1
-
-    Returns:
-        torch.optim.lr_scheduler.LambdaLR with the appropriate schedule.
-    """
-
-    def lr_lambda(current_step: int) -> float:
-        # linear warmup phase
-        if current_step < num_warmup_steps:
-            return current_step / max(1, num_warmup_steps)
-
-        # cosine
-        progress = (current_step - num_warmup_steps) / max(
-            1, num_training_steps - num_warmup_steps
-        )
-
-        cosine_lr_multiple = 0.5 * (
-            1.0 + math.cos(math.pi * num_cycles * 2.0 * progress)
-        )
-        return max(0.0, cosine_lr_multiple)
-
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
 def get_ascii_indices(seq_array) -> torch.LongTensor:
@@ -237,6 +189,8 @@ def train(
     warmup_epoch=20,
     verbose=True,
     device="cuda",
+    test_bundle=None,
+    neptune_run=None,
 ):
     loss_func = SiameseCELoss()
     dataloader = get_hla_dataloader(dataset, batch_size, True)
@@ -279,10 +233,41 @@ def train(
             _lr = lr_scheduler.get_last_lr()[0]
         else:
             _lr = lr
+        mean_loss = np.mean(loss_list)
         if verbose:
-            logging.info(
-                f"[Epoch={i_epoch}] loss={np.mean(loss_list):.5f}, lr={_lr:.3e}"
+            logging.info(f"[Epoch={i_epoch}] loss={mean_loss:.5f}, lr={_lr:.3e}")
+
+        if test_bundle:
+            test_df, test_allele_list, hla_df, hla_esm_list, fasta_list = test_bundle
+            (
+                mean_rank01_recall_rate,
+                mean_rank05_recall_rate,
+                mean_rank20_recall_rate,
+            ) = test(
+                test_df,
+                test_allele_list,
+                hla_encoder,
+                pept_encoder,
+                hla_df,
+                hla_esm_list,
+                fasta_list,
             )
+            print(
+                f"test alleles rank%<0.1 average recall rate: {mean_rank01_recall_rate:.2f}"
+            )
+            print(
+                f"test alleles rank%<0.5 average recall rate: {mean_rank05_recall_rate:.2f}"
+            )
+            print(
+                f"test alleles rank%<2 average recall rate: {mean_rank20_recall_rate:.2f}"
+            )
+        if neptune_run:
+            neptune_run["train/loss"].log(mean_loss)
+            neptune_run["train/lr"].log(_lr)
+            if test_bundle:
+                neptune_run["test/loss1"].log(mean_rank01_recall_rate)
+                neptune_run["test/loss2"].log(mean_rank05_recall_rate)
+                neptune_run["test/loss3"].log(mean_rank20_recall_rate)
 
 
 def embed_hla_esm_list(
@@ -321,3 +306,36 @@ def embed_peptides(
             embeds[i : i + batch_size, :] = pept_encoder(x).detach().cpu().numpy()
     torch.cuda.empty_cache()
     return embeds
+
+
+def test(
+    test_df: pd.DataFrame,
+    test_allele_list,
+    hla_encoder,
+    pept_encoder,
+    hla_df,
+    hla_esm_list,
+    fasta_list,
+):
+    from .mhc_binding_retriever import MHCBindingRetriever
+
+    hla_embeds = embed_hla_esm_list(hla_encoder, hla_esm_list)
+    retriever = MHCBindingRetriever(
+        hla_encoder, pept_encoder, hla_df, hla_embeds, fasta_list
+    )
+
+    retriever.n_decoy_samples = 1000000
+    pept_groups = test_df.groupby("allele")
+    rank01_list = []
+    rank05_list = []
+    rank20_list = []
+    for i in range(len(test_allele_list)):
+        tmp_allele = test_allele_list[i]
+        pept_df = pept_groups.get_group(tmp_allele)
+        embed = retriever.hla_embeds[retriever.dataset.allele_idxes_dict[tmp_allele][0]]
+        df = retriever.get_binding_metrics_for_embeds(embed, pept_df.sequence.values)
+        rank01_list.append(len(df.query("best_allele_rank<=0.1")) / len(df))
+        rank05_list.append(len(df.query("best_allele_rank<=0.5")) / len(df))
+        rank20_list.append(len(df.query("best_allele_rank<=2")) / len(df))
+
+    return np.mean(rank01_list), np.mean(rank05_list), np.mean(rank20_list)
