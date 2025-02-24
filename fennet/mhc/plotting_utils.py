@@ -359,16 +359,34 @@ def plot_umap_df(
     return fig
 
 
-def plot_motif_multi_mer(df, allele_col, allele, kmers, axes=None, logo_scale=20):
+def plot_motif_multi_mer(
+    df,
+    allele_col,
+    allele,
+    kmers,
+    axes=None,
+    logo_scale=20,
+    fig_width_per_kmer=4,
+    fig_height=3,
+):
     df["nAA"] = df.sequence.str.len()
     df = df.drop_duplicates(
         [allele_col, "sequence"]
         + (["mods", "mod_sites"] if "mods" in df.columns else [])
     )
     if axes is None:
-        fig, axes = plt.subplots(1, len(kmers), sharey="row")
+        fig, axes = plt.subplots(
+            1,
+            len(kmers),
+            figsize=(len(kmers) * fig_width_per_kmer, fig_height),
+            sharey="row",
+        )
     logo_plots = []
     max_y_vals = []
+
+    if not isinstance(axes, np.ndarray):
+        axes = [axes]
+
     for i, ax in enumerate([axes] if len(kmers) == 1 else axes):
         logo_plots.append(
             plot_motif(df, allele_col, allele, kmers[i], ax=ax, logo_scale=logo_scale)
