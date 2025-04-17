@@ -5,6 +5,9 @@ from pathlib import Path
 
 import click
 import esm
+import faiss
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -19,6 +22,7 @@ from fennet.mhc.mhc_binding_model import (
 )
 from fennet.mhc.mhc_binding_retriever import MHCBindingRetriever
 from fennet.mhc.mhc_utils import NonSpecificDigest
+from fennet.mhc.plotting_utils import plot_motif_multi_mer
 
 
 @click.group(
@@ -694,6 +698,122 @@ def predict_binding_for_epitope(
     output_dir = Path(out_folder)
     output_file_path = output_dir.joinpath("allele_df_for_epitope.tsv")
     allele_df.to_csv(output_file_path, sep="\t", index=False)
+
+
+@mhc.command(
+    "deconvolution_for_peptides",
+    help="Peptides deconvolution to clusters with corresponding binding motifs.",
+)
+@click.option(
+    "--peptide_pkl",
+    type=click.Path(exists=True),
+    help="Path to Peptide pre-embeddings file (.pkl)",
+)
+@click.option(
+    "--n_centroids",
+    type=int,
+    default=10,
+    show_default=True,
+    help="number of kmeans centroids to cluster.",
+)
+@click.option(
+    "--out-folder",
+    type=click.Path(),
+    required=True,
+    help="Output folder for the results.",
+)
+@click.option(
+    "--load_model_pept",
+    type=click.Path(exists=True),
+    default="./model/pept_model_v0819.pt",
+    show_default=True,
+    help="Path to peptide model parameter file.",
+)
+@click.option(
+    "--device",
+    type=click.Choice(["cpu", "cuda"]),
+    default="cuda",
+    show_default=True,
+    help="Device to use",
+)
+def deconvolution_for_peptides(
+    peptide_pkl,
+    n_centroids,
+    out_folder,
+    load_model_pept,
+    device,
+):
+    # check input peptide source
+    try:
+        with open(peptide_pkl, "rb") as f:
+            data_dict = pickle.load(f)
+            peptide_list = data_dict["peptide_list"]
+            pept_embeds = data_dict["pept_embeds"]
+    except Exception as e:
+        raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+
+    if len(peptide_list) == 0:
+        click.echo("No valid peptide sequences")
+        sys.exit(1)
+
+    if device == "cuda" and not torch.cuda.is_available():
+        click.echo("CUDA not available. Change to use CPU")
+        device = "cpu"
+
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder)
+
+    pept_encoder = ModelSeqEncoder().to(device)
+
+    try:
+        pept_encoder.load_state_dict(
+            torch.load(load_model_pept, weights_only=True, map_location=device)
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load model: {e}") from e
+
+    d = pept_embeds.shape[1]
+    index = faiss.IndexFlatL2(d)
+
+    kmeans = faiss.Kmeans(d, n_centroids)
+    kmeans.niter = 20
+    kmeans.verbose = True
+    kmeans.min_points_per_centroid = 10
+    kmeans.max_points_per_centroid = 1000
+
+    kmeans.train(pept_embeds, index)
+    centroids = faiss.vector_float_to_array(kmeans.centroids).reshape(n_centroids, d)
+    trained_index = faiss.IndexFlatL2(d)
+    trained_index.add(centroids)
+
+    return_dists, return_labels = trained_index.search(pept_embeds, 1)
+    cluster_labels = return_labels.flatten()
+    cluster_dists = return_dists.flatten()
+
+    cluster_df = pd.DataFrame(
+        {
+            "sequence": peptide_list,
+            "cluster_label": cluster_labels,
+            "cluster_dist": cluster_dists,
+        }
+    )
+
+    output_dir = Path(out_folder)
+    output_file_path = output_dir.joinpath("peptides_deconvolution_cluster_df.tsv")
+    cluster_df.to_csv(output_file_path, sep="\t", index=False)
+
+    matplotlib.rcParams["axes.grid"] = False
+    kmers = [8, 9, 10, 11]
+
+    for i in range(n_centroids):
+        plot_motif_multi_mer(
+            cluster_df.copy(),
+            allele_col="cluster_label",
+            allele=i,
+            kmers=kmers,
+            fig_width_per_kmer=4,
+        )
+        plt.savefig(f"{out_folder}/{i}_cluster_motif.svg")
 
 
 if __name__ == "__main__":
