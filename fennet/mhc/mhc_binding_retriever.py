@@ -137,7 +137,7 @@ class MHCBindingRetriever:
         self.dataset = HlaDataSet(hla_df, [], None, protein_data, digested_pept_lens)
         self.hla_embeds = hla_embeds
 
-        self.n_decoy_samples = 5000
+        self.n_decoy_samples = 1000000
         self.outlier_threshold = 0.005
         self.use_fmm_fdr = False
         self.decoy_rnd_seed = 1337
@@ -219,12 +219,12 @@ class MHCBindingRetriever:
 
         best_allele_ranks = get_binding_ranks(dist, rnd_dist)
 
-        fdrs = get_binding_fdr_for_best_allele(
-            dist,
-            rnd_dist,
-            outlier_threshold=self.outlier_threshold,
-            fmm_fdr=self.use_fmm_fdr,
-        )
+        # fdrs = get_binding_fdr_for_best_allele(
+        #     dist,
+        #     rnd_dist,
+        #     outlier_threshold=self.outlier_threshold,
+        #     fmm_fdr=self.use_fmm_fdr,
+        # )
 
         _dict = {}
         if has_seqs:
@@ -234,7 +234,7 @@ class MHCBindingRetriever:
                 "best_allele_id": best_allele_idxes,
                 "best_allele_dist": min_allele_distances,
                 "best_allele_rank": best_allele_ranks,
-                "best_allele_fdr": fdrs,
+                # "best_allele_fdr": fdrs,
             }
         )
         df = pd.DataFrame(_dict)

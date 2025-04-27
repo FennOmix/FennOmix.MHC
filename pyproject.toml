@@ -15,14 +15,17 @@ dependencies = [
   "click",
   "faiss-gpu",
   "logomaker",
+  "plotly",
   "umap"
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 authors = [
   {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"},
+  {name = "Jin-Tao Cheng", email = "1274873858@qq.com"}
 ]
 maintainers = [
-  {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"}
+  {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"},
+  {name = "Jin-Tao Cheng", email = "1274873858@qq.com"}
 ]
 description = "Fennet"
 readme = "README.md"
@@ -68,6 +71,10 @@ fennet = "fennet.cli:run"
 
 [tool.setuptools]
 py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fennet*"]
 
 [tool.ruff.lint]
 select =  [

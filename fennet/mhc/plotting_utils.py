@@ -416,7 +416,7 @@ def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
 
 def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
     df = df[(df[allele_col] == allele) & (df.nAA == kmer)]
-    print(f"allele={allele}, kmer={kmer}, n={len(df)}")
+    # print(f"allele={allele}, kmer={kmer}, n={len(df)}")
     data = np.zeros((kmer, 26), dtype=float)
     for seq in df.sequence.values:
         data[(np.arange(kmer), np.array(seq, "c").view(np.int8) - ord("A"))] += 1
