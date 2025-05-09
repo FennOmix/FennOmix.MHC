@@ -13,7 +13,7 @@ dependencies = [
   "matplotlib",
   "pre-commit",
   "click",
-  "faiss-gpu",
+  "faiss-cpu",
   "logomaker",
   "plotly",
   "umap"

@@ -1,0 +1,7 @@
+# CONST CONFIG
+FENNETMHC_HOME : "~/fennet/mhc"
+
+local_model_zip_name : "model_v0819.zip"
+
+model_url: "https://drive.google.com/file/d/1wkTadpkK9Vr8dSPlFLI4C22H5IHdSvHo/view?usp=drive_link"
+
