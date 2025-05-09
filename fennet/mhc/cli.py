@@ -21,20 +21,8 @@ from fennet.mhc.mhc_binding_model import (
     embed_peptides,
 )
 from fennet.mhc.mhc_binding_retriever import MHCBindingRetriever
-from fennet.mhc.mhc_utils import NonSpecificDigest
+from fennet.mhc.mhc_utils import NonSpecificDigest, FOUNDATION_MODEL_DIR, prepare_models
 from fennet.mhc.plotting_utils import plot_motif_multi_mer
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(SCRIPT_DIR, "model")
-
-hla_files = [f for f in os.listdir(MODEL_DIR) if f.startswith("HLA") and os.path.isfile(os.path.join(MODEL_DIR, f))]
-if hla_files:
-    HLA_MODEL_PT = os.path.join(MODEL_DIR, hla_files[0])
-pept_files = [f for f in os.listdir(MODEL_DIR) if f.startswith("pept") and os.path.isfile(os.path.join(MODEL_DIR, f))]
-if pept_files:
-    PEPT_MODEL_PT = os.path.join(MODEL_DIR, pept_files[0])
-
-CONST_DIR = os.path.join(SCRIPT_DIR, "const")
 
 
 def set_device(device: str) -> str:
@@ -62,7 +50,7 @@ def set_device(device: str) -> str:
     "mhc",
     context_settings=dict(help_option_names=["-h", "--help"]),
     invoke_without_command=True,
-    help="Foundation embedding model for MHC class I molecule and peptide binding prediction"
+    help="Foundation embedding model for MHC class I molecules and peptides binding prediction"
 )
 @click.pass_context
 def mhc(ctx, **kwargs):
@@ -70,7 +58,7 @@ def mhc(ctx, **kwargs):
         click.echo(mhc.get_help(ctx))
 
 
-@mhc.command("embed-proteins", help="Embed MHC class I proteins using FennetMHC HLA encoder")
+@mhc.command("embed-proteins", help="Embed MHC class I proteins using Fennet-MHC HLA encoder")
 @click.option(
     "--fasta",
     type=click.Path(exists=True),
@@ -89,7 +77,7 @@ def mhc(ctx, **kwargs):
     default=None,
     show_default=False,
     help="Path to model parameter file of HLA encoder module. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--device",
@@ -147,7 +135,15 @@ def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
 
     hla_encoder = ModelHlaEncoder().to(device)
     if hla_model_path is None:
-        hla_model_path = HLA_MODEL_PT
+        default_hla_model_path = os.path.join(FOUNDATION_MODEL_DIR, "HLA_model.pt")
+        #check if downloaded
+        if os.path.exists(default_hla_model_path):
+            hla_model_path = default_hla_model_path
+        else:
+            hla_model_path, _ = prepare_models()
+            if not hla_model_path:
+                sys.exit(1)
+    
     try:
         hla_encoder.load_state_dict(
             torch.load(hla_model_path, weights_only=True, map_location=device)
@@ -169,7 +165,7 @@ def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
 
 @mhc.command(
     "embed-peptides-fasta",
-    help="Embed peptides from fasta using FennetMHC peptide encoder",
+    help="Embed peptides that non-specifically digested from fasta using Fennet-MHC peptide encoder",
 )
 @click.option(
     "--fasta",
@@ -203,7 +199,7 @@ def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
     default=None,
     show_default=False,
     help="Path to peptide model parameter file. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--device",
@@ -219,7 +215,15 @@ def embed_peptides_fasta(
 
     pept_encoder = ModelSeqEncoder().to(device)
     if peptide_model_path is None:
-        peptide_model_path = PEPT_MODEL_PT
+        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
+        #check if downloaded
+        if os.path.exists(default_peptide_model_path):
+            peptide_model_path = default_peptide_model_path
+        else:
+            _, peptide_model_path = prepare_models()
+            if not peptide_model_path:
+                sys.exit(1)
+
     try:
         pept_encoder.load_state_dict(
             torch.load(peptide_model_path, weights_only=True, map_location=device)
@@ -272,7 +276,7 @@ def embed_peptides_fasta(
 
 @mhc.command(
     "embed-peptides-tsv",
-    help="Embed peptides from given tsv using FennetMHC peptide encoder",
+    help="Embed peptides from given tsv using Fennet-MHC peptide encoder",
 )
 @click.option(
     "--tsv",
@@ -306,7 +310,7 @@ def embed_peptides_fasta(
     default=None,
     show_default=False,
     help="Path to peptide model parameter file."
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--device",
@@ -320,9 +324,17 @@ def embed_peptides_tsv(
 ):
     device = set_device(device)
 
-    pept_encoder = ModelSeqEncoder().to(device)
+    pept_encoder = ModelSeqEncoder().to(device)   
     if peptide_model_path is None:
-        peptide_model_path = PEPT_MODEL_PT
+        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
+        #check if downloaded
+        if os.path.exists(default_peptide_model_path):
+            peptide_model_path = default_peptide_model_path
+        else:
+            _, peptide_model_path = prepare_models()
+            if not peptide_model_path:
+                sys.exit(1)
+
     try:
         pept_encoder.load_state_dict(
             torch.load(peptide_model_path, weights_only=True, map_location=device)
@@ -387,15 +399,15 @@ def embed_peptides_tsv(
 @click.option(
     "--peptide-pkl-path",
     type=click.Path(exists=True),
+    required=True,
     help="Path to Peptide pre-embeddings file (.pkl).",
 )
 @click.option(
     "--protein-pkl-path",
     type=click.Path(exists=True),
-    default=None,
-    show_default=False,
+    required=True,
     help="Path to the pre-computed MHC protein embeddings file (.pkl). "
-        "If not provided, a default embeddings file will be used. "
+        "A default embeddings file cotaining 15672 alleles is provided. "
         "If your desired alleles are not included in the default file, "
         "you can generate a custom embeddings file using the *embed_proteins* command.",
 )
@@ -433,12 +445,18 @@ def embed_peptides_tsv(
     help="Filter peptide by best allele binding distance.",
 )
 @click.option(
+    "--background-fasta",
+    type=click.Path(exists=True),
+    required=True,
+    help="Path to background human proteins fasta file.",
+)
+@click.option(
     "--hla-model-path",
     type=click.Path(exists=True),
     default=None,
     show_default=False,
     help="Path to HLA model parameter file. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--peptide-model-path",
@@ -446,7 +464,7 @@ def embed_peptides_tsv(
     default=None,
     show_default=True,
     help="Path to peptide model parameter file. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--device",
@@ -463,6 +481,7 @@ def predict_binding_for_MHC(
     min_peptide_length,
     max_peptide_length,
     filter_distance,
+    background_fasta,
     hla_model_path,
     peptide_model_path,
     device,
@@ -489,8 +508,9 @@ def predict_binding_for_MHC(
         sys.exit(1)
 
     # check input MHC protein source
-    if protein_pkl_path is None:
-        protein_pkl_path = os.path.join(CONST_DIR, "hla_v0819_embeds.pkl")
+    # if protein_pkl_path is None:
+    #     protein_pkl_path = os.path.join(CONST_DIR, "hla_v0819_embeds.pkl")
+    
     try:
         with open(protein_pkl_path, "rb") as f:
             data_dict = pickle.load(f)
@@ -518,10 +538,23 @@ def predict_binding_for_MHC(
     pept_encoder = ModelSeqEncoder().to(device)
     hla_encoder = ModelHlaEncoder().to(device)
 
-    if hla_model_path is None:
-        hla_model_path = HLA_MODEL_PT
     if peptide_model_path is None:
-        peptide_model_path = PEPT_MODEL_PT
+        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
+        if os.path.exists(default_peptide_model_path):
+            peptide_model_path = default_peptide_model_path
+        else:
+            _, peptide_model_path = prepare_models()
+            if not peptide_model_path:
+                sys.exit(1)
+
+    if hla_model_path is None:
+        default_hla_model_path = os.path.join(FOUNDATION_MODEL_DIR, "HLA_model.pt")
+        if os.path.exists(default_hla_model_path):
+            hla_model_path = default_hla_model_path
+        else:
+            hla_model_path, _ = prepare_models()
+            if not hla_model_path:
+                sys.exit(1)
 
     try:
         hla_encoder.load_state_dict(
@@ -533,14 +566,12 @@ def predict_binding_for_MHC(
     except Exception as e:
         raise RuntimeError(f"Failed to load model: {e}") from e
 
-    human_protein_fasta = os.path.join(CONST_DIR, "uniprotkb_UP000005640_AND_reviewed_true_2024_03_01.fasta")
-
     retriever = MHCBindingRetriever(
         hla_encoder,
         pept_encoder,
         protein_df,
         hla_embeds,
-        human_protein_fasta,
+        background_fasta,
         digested_pept_lens=(min_peptide_length, max_peptide_length),
     )
     peptide_df = retriever.get_binding_metrics_for_peptides(
@@ -548,7 +579,8 @@ def predict_binding_for_MHC(
     )
     peptide_df["sequence"] = peptide_list
     peptide_df = peptide_df.drop(columns=["best_allele_id"], errors="ignore")
-    peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist", "best_allele_rank"]]
+    peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist"]]
+    # peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist", "best_allele_rank"]]
 
     peptide_df = peptide_df[
         peptide_df["best_allele_dist"] <= filter_distance
@@ -610,12 +642,18 @@ def predict_binding_for_MHC(
     help="Filter by binding distance.",
 )
 @click.option(
+    "--background-fasta",
+    type=click.Path(exists=True),
+    required=True,
+    help="Path to background human proteins fasta file.",
+)
+@click.option(
     "--hla-model-path",
     type=click.Path(exists=True),
     default=None,
     show_default=False,
     help="Path to HLA model parameter file. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--peptide-model-path",
@@ -623,7 +661,7 @@ def predict_binding_for_MHC(
     default=None,
     show_default=False,
     help="Path to peptide model parameter file. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--device",
@@ -639,6 +677,7 @@ def predict_binding_for_epitope(
     min_peptide_length,
     max_peptide_length,
     filter_distance,
+    background_fasta,
     hla_model_path,
     peptide_model_path,
     device,
@@ -665,8 +704,9 @@ def predict_binding_for_epitope(
         sys.exit(1)
 
     # check input MHC protein source
-    if protein_pkl_path is None:
-        protein_pkl_path = os.path.join(CONST_DIR, "hla_v0819_embeds.pkl")
+    # if protein_pkl_path is None:
+    #     protein_pkl_path = os.path.join(CONST_DIR, "hla_v0819_embeds.pkl")
+
     try:
         with open(protein_pkl_path, "rb") as f:
             data_dict = pickle.load(f)
@@ -683,10 +723,23 @@ def predict_binding_for_epitope(
     pept_encoder = ModelSeqEncoder().to(device)
     hla_encoder = ModelHlaEncoder().to(device)
 
-    if hla_model_path is None:
-        hla_model_path = HLA_MODEL_PT
     if peptide_model_path is None:
-        peptide_model_path = PEPT_MODEL_PT
+        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
+        if os.path.exists(default_peptide_model_path):
+            peptide_model_path = default_peptide_model_path
+        else:
+            _, peptide_model_path = prepare_models()
+            if not peptide_model_path:
+                sys.exit(1)
+
+    if hla_model_path is None:
+        default_hla_model_path = os.path.join(FOUNDATION_MODEL_DIR, "HLA_model.pt")
+        if os.path.exists(default_hla_model_path):
+            hla_model_path = default_hla_model_path
+        else:
+            hla_model_path, _ = prepare_models()
+            if not hla_model_path:
+                sys.exit(1)
 
     try:
         hla_encoder.load_state_dict(
@@ -698,14 +751,12 @@ def predict_binding_for_epitope(
     except Exception as e:
         raise RuntimeError(f"Failed to load model: {e}") from e
 
-    human_protein_fasta = os.path.join(CONST_DIR, "uniprotkb_UP000005640_AND_reviewed_true_2024_03_01.fasta")
-
     retriever = MHCBindingRetriever(
         hla_encoder,
         pept_encoder,
         protein_df,
         hla_embeds,
-        human_protein_fasta,
+        background_fasta,
         digested_pept_lens=(min_peptide_length, max_peptide_length),
     )
 
@@ -764,7 +815,7 @@ def predict_binding_for_epitope(
     default=None,
     show_default=False,
     help="Path to peptide model parameter file. "
-        "If not provided, a default model will be used. ",
+        "If not provided, a default model will be downloaded and used. ",
 )
 @click.option(
     "--device",
@@ -801,7 +852,14 @@ def deconvolute_peptides(
     pept_encoder = ModelSeqEncoder().to(device)
 
     if peptide_model_path is None:
-        peptide_model_path = PEPT_MODEL_PT
+        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
+        if os.path.exists(default_peptide_model_path):
+            peptide_model_path = default_peptide_model_path
+        else:
+            _, peptide_model_path = prepare_models()
+            if not peptide_model_path:
+                sys.exit(1)
+
     try:
         pept_encoder.load_state_dict(
             torch.load(peptide_model_path, weights_only=True, map_location=device)
@@ -839,16 +897,16 @@ def deconvolute_peptides(
     output_file_path = output_dir.joinpath(f"peptides_deconvolution_cluster_df_{current_time}.tsv")
     cluster_df.to_csv(output_file_path, sep="\t", index=False)
 
-    matplotlib.rcParams["axes.grid"] = False
-    kmers = [8, 9, 10, 11]
+    # matplotlib.rcParams["axes.grid"] = False
+    # kmers = [8, 9, 10, 11]
 
-    for i in range(n_centroids):
-        plot_motif_multi_mer(
-            cluster_df.copy(),
-            allele_col="cluster_label",
-            allele=i,
-            kmers=kmers,
-            fig_width_per_kmer=4,
-        )
-        plt.savefig(f"{out_folder}/{i}_cluster_motif.svg")
+    # for i in range(n_centroids):
+    #     plot_motif_multi_mer(
+    #         cluster_df.copy(),
+    #         allele_col="cluster_label",
+    #         allele=i,
+    #         kmers=kmers,
+    #         fig_width_per_kmer=4,
+    #     )
+    #     plt.savefig(f"{out_folder}/{i}_cluster_motif.svg")
 
