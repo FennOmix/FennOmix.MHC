@@ -4,7 +4,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-__project__ = "fennet"
+__project__ = "fennet-mhc"
 __version__ = "0.0.1"
 __license__ = "Apache"
 __description__ = "Deep learning for multi-dimensional proteomics."
