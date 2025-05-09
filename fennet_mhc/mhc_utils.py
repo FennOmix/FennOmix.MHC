@@ -1,18 +1,17 @@
+import logging
 import os
 import pickle
-import typing
+import re
+import ssl
+import urllib
+from zipfile import ZipFile
 
 import numpy as np
 import pandas as pd
 from alphabase.protein.fasta import load_all_proteins
 from alphabase.protein.lcp_digest import get_substring_indices
 
-import logging
-import ssl
-import urllib
-import re
-from zipfile import ZipFile
-from fennet.mhc.settings import global_settings
+from fennet_mhc.settings import global_settings
 
 FOUNDATION_MODEL_DIR = os.path.join(
     os.path.join(
@@ -25,8 +24,7 @@ MODEL_URL = global_settings["model_url"]
 MODEL_ZIP_FILE_PATH = os.path.join(FOUNDATION_MODEL_DIR, LOCAL_MODEL_ZIP_NAME)
 
 MODEL_DOWNLOAD_INSTRUCTIONS = (
-    "Please download the "
-    f'zip. file by yourself from "{MODEL_URL}".'
+    "Please download the " f'zip. file by yourself from "{MODEL_URL}".'
 )
 
 
@@ -67,11 +65,17 @@ def prepare_models(
 
     download_models(url=url, target_path=target_zip_path, overwrite=overwrite)
 
-    HLA_model_path, pept_model_path = extract_model_zip(downloaded_zip=target_zip_path, extract_to_path=extract_to_path)
-    
-    if HLA_model_path and pept_model_path:
-        if os.path.exists(HLA_model_path) and os.path.exists(pept_model_path):
-            return HLA_model_path, pept_model_path
+    HLA_model_path, pept_model_path = extract_model_zip(
+        downloaded_zip=target_zip_path, extract_to_path=extract_to_path
+    )
+
+    if (
+        HLA_model_path
+        and pept_model_path
+        and os.path.exists(HLA_model_path)
+        and os.path.exists(pept_model_path)
+    ):
+        return HLA_model_path, pept_model_path
 
     return None, None
 
@@ -81,7 +85,7 @@ def download_models(
 ):
     if not overwrite and os.path.exists(target_path):
         raise FileExistsError(f"Model file already exists: {target_path}")
-    
+
     logging.info(f"Downloading models from {url} to {target_path} ...")
     try:
         os.makedirs(os.path.dirname(target_path), exist_ok=True)
@@ -94,7 +98,7 @@ def download_models(
             f"Downloading model failed: {e}.\n" + MODEL_DOWNLOAD_INSTRUCTIONS
         ) from e
 
-    logging.info(f"Successfully downloaded models.")
+    logging.info("Successfully downloaded models.")
 
 
 def extract_model_zip(downloaded_zip, extract_to_path):
@@ -111,20 +115,30 @@ def extract_model_zip(downloaded_zip, extract_to_path):
             if HLA_pattern.match(filename):
                 target_path = os.path.join(extract_to_path, os.path.basename(filename))
                 try:
-                    with zip.open(filename) as source, open(target_path, "wb") as target:
+                    with (
+                        zip.open(filename) as source,
+                        open(target_path, "wb") as target,
+                    ):
                         target.write(source.read())
                     HLA_model_path = target_path
-                    logging.info(f"Successfully extracted HLA model file: {filename} -> {target_path}")
+                    logging.info(
+                        f"Successfully extracted HLA model file: {filename} -> {target_path}"
+                    )
                 except Exception as e:
                     logging.error(f"Extracting HLA model file failed: {e}.\n")
 
             if pept_pattern.match(filename):
                 target_path = os.path.join(extract_to_path, os.path.basename(filename))
                 try:
-                    with zip.open(filename) as source, open(target_path, "wb") as target:
+                    with (
+                        zip.open(filename) as source,
+                        open(target_path, "wb") as target,
+                    ):
                         target.write(source.read())
                     pept_model_path = target_path
-                    logging.info(f"Successfully extracted pept model file: {filename} -> {target_path}")
+                    logging.info(
+                        f"Successfully extracted pept model file: {filename} -> {target_path}"
+                    )
                 except Exception as e:
                     logging.error(f"Extracting Pept model file failed: {e}.\n")
 
@@ -150,9 +164,7 @@ def load_hla_pep_df(folder=r"x:\Feng\HLA-DB\all_alleles\mixmhcpred", rank=2):
 
 
 class NonSpecificDigest:
-    def __init__(
-        self, protein_data: typing.Tuple[pd.DataFrame, list, str], lens=[8, 14]
-    ):
+    def __init__(self, protein_data: tuple[pd.DataFrame, list, str], lens=[8, 14]):
         if isinstance(protein_data, pd.DataFrame):
             self.cat_protein_sequence = (
                 "$" + "$".join(protein_data.sequence.values) + "$"
@@ -174,7 +186,7 @@ class NonSpecificDigest:
             [
                 self.cat_protein_sequence[start:stop]
                 for start, stop in zip(
-                    self.digest_starts[idxes], self.digest_stops[idxes]
+                    self.digest_starts[idxes], self.digest_stops[idxes], strict=False
                 )
             ],
             columns=["sequence"],
@@ -185,5 +197,7 @@ class NonSpecificDigest:
     def get_peptide_seqs_from_idxes(self, idxes):
         return [
             self.cat_protein_sequence[start:stop]
-            for start, stop in zip(self.digest_starts[idxes], self.digest_stops[idxes])
+            for start, stop in zip(
+                self.digest_starts[idxes], self.digest_stops[idxes], strict=False
+            )
         ]

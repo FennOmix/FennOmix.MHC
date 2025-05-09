@@ -3,7 +3,7 @@ requires = ["setuptools == 63.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fennet"
+name = "fennet-mhc"
 version = "0.0.1"
 dependencies = [
   "alphabase",
@@ -27,7 +27,7 @@ maintainers = [
   {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"},
   {name = "Jin-Tao Cheng", email = "1274873858@qq.com"}
 ]
-description = "Fennet"
+description = "Fennet-MHC"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
 keywords = ["deep learning", "protein language model", "proteomics", "multi-dimensional proteomics"]
@@ -56,18 +56,18 @@ gui = ["streamlit"]
 [project.urls]
 Homepage = "https://fennomix.com"
 Documentation = "https://readthedocs.org"
-Repository = "https://github.com/FennOmix/fennet.git"
-"Bug Tracker" = "https://github.com/FennOmix/fennet/issues"
-Changelog = "https://github.com/FennOmix/fennet/blob/main/CHANGELOG.md"
+Repository = "https://github.com/FennOmix/fennet.mhc.git"
+"Bug Tracker" = "https://github.com/FennOmix/fennet.mhc/issues"
+Changelog = "https://github.com/FennOmix/fennet.mhc/blob/main/CHANGELOG.md"
 
 [project.scripts]
-fennet = "fennet.cli:run"
+fennet-mhc = "fennet_mhc.cli:run"
 
 # [project.gui-scripts]
 # fennet-gui = "fennet:main_gui"
 
-# [project.entry-points."fennet"]
-# fennet = "fennet:main"
+# [project.entry-points."fennet_mhc"]
+# fennet_mhc = "fennet_mhc:main"
 
 [tool.setuptools]
 py-modules = []

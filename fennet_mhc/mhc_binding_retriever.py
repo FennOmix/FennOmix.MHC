@@ -332,7 +332,8 @@ class MHCBindingRetriever:
 
         if keep_not_best_alleles:
             df.rename(
-                columns=dict(zip(list(range(len(alleles))), alleles)), inplace=True
+                columns=dict(zip(list(range(len(alleles))), alleles, strict=False)),
+                inplace=True,
             )
         df["best_allele"] = df.best_allele_id.apply(lambda i: alleles[i])
 

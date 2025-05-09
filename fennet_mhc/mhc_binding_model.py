@@ -11,7 +11,6 @@ from peptdeep.model.building_block import (
     SeqAttentionSum,
     ascii_embedding,
 )
-
 from peptdeep.utils import get_available_device, logging
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data.dataloader import DataLoader
@@ -22,6 +21,7 @@ from .mhc_utils import NonSpecificDigest
 random.seed(1337)
 np.random.seed(1337)
 torch.random.manual_seed(1337)
+
 
 # peptdeep has removed this function,
 # copy it here as a local method.
