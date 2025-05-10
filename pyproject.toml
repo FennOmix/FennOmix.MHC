@@ -5,32 +5,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fennet-mhc"
 version = "0.0.1"
-dependencies = [
-  "alphabase",
-  "peptdeep",
-  "pydivsufsort",
-  "fair-esm",
-  "matplotlib",
-  "pre-commit",
-  "click",
-  "faiss-cpu",
-  "logomaker",
-  "plotly",
-  "umap"
-]
 requires-python = ">=3.10"
 authors = [
-  {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"},
+  {name = "Wen-Feng Zeng", email = "zengwenfeng@westlake.edu.cn"},
   {name = "Jin-Tao Cheng", email = "1274873858@qq.com"}
 ]
 maintainers = [
-  {name = "Wen-Feng Zeng", email = "jalew.zwf@qq.com"},
+  {name = "Wen-Feng Zeng", email = "zengwenfeng@westlake.edu.cn"},
   {name = "Jin-Tao Cheng", email = "1274873858@qq.com"}
 ]
 description = "Fennet-MHC"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
-keywords = ["deep learning", "protein language model", "proteomics", "multi-dimensional proteomics"]
+keywords = [
+  "contrastive learning", "protein language model",
+  "immunopeptidomics", "mass spectrometry",
+  "HLA", "MHC", "peptide-MHC binding prediction"
+]
 classifiers = [
   "Development Status :: 1 - Planning",
   "Programming Language :: Python"
@@ -50,11 +41,8 @@ classifiers = [
 #     "Topic :: Scientific/Engineering :: Bio-Informatics",
 # ]
 
-[project.optional-dependencies]
-gui = ["streamlit"]
-
 [project.urls]
-Homepage = "https://fennomix.com"
+Homepage = "https://fennomix.lab.westlake.edu.cn"
 Documentation = "https://readthedocs.org"
 Repository = "https://github.com/FennOmix/fennet.mhc.git"
 "Bug Tracker" = "https://github.com/FennOmix/fennet.mhc/issues"
@@ -75,6 +63,10 @@ py-modules = []
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["fennet*"]
+
+[tool.setuptools.dynamic]
+# https://stackoverflow.com/a/73600610
+dependencies = {file = ["requirements/requirements_loose.txt"]}
 
 [tool.ruff.lint]
 select =  [

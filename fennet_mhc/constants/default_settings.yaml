@@ -1,6 +1,4 @@
 # CONST CONFIG
-FENNETMHC_HOME : "~/fennet/mhc"
+FENNETMHC_HOME : "~/fennet-mhc"
 
-local_model_zip_name : "model_v0819.zip"
-
-model_url: "https://drive.google.com/file/d/1wkTadpkK9Vr8dSPlFLI4C22H5IHdSvHo/view?usp=drive_link"
+mhc_url: "https://fennomix.lab.westlake.edu.cn/resource/mhc/"

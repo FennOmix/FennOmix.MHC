@@ -61,9 +61,9 @@ def run(ctx, **kwargs):
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
 def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
-    import fennet_mhc.cli_runners as cli_runners
+    import fennet_mhc.pipeline_api as pipeline_api
 
-    cli_runners.embed_proteins(fasta, save_pkl_path, hla_model_path, device)
+    pipeline_api.embed_proteins(fasta, save_pkl_path, hla_model_path, device)
 
 
 @run.command(
@@ -119,9 +119,9 @@ def embed_peptides_fasta(
     peptide_model_path,
     device,
 ):
-    import fennet_mhc.cli_runners as cli_runners
+    import fennet_mhc.pipeline_api as pipeline_api
 
-    cli_runners.embed_peptides_fasta(
+    pipeline_api.embed_peptides_fasta(
         fasta,
         save_pkl_path,
         min_peptide_length,
@@ -184,9 +184,9 @@ def embed_peptides_tsv(
     peptide_model_path,
     device,
 ):
-    import fennet_mhc.cli_runners as cli_runners
+    import fennet_mhc.pipeline_api as pipeline_api
 
-    cli_runners.embed_peptides_tsv(
+    pipeline_api.embed_peptides_tsv(
         tsv,
         save_pkl_path,
         min_peptide_length,
@@ -290,9 +290,9 @@ def predict_binding_for_MHC(
     peptide_model_path,
     device,
 ):
-    import fennet_mhc.cli_runners as cli_runners
+    import fennet_mhc.pipeline_api as pipeline_api
 
-    cli_runners.predict_binding_for_MHC(
+    pipeline_api.predict_binding_for_MHC(
         peptide_pkl_path,
         protein_pkl_path,
         alleles,
@@ -394,9 +394,9 @@ def predict_binding_for_epitope(
     peptide_model_path,
     device,
 ):
-    import fennet_mhc.cli_runners as cli_runners
+    import fennet_mhc.pipeline_api as pipeline_api
 
-    cli_runners.predict_binding_for_epitope(
+    pipeline_api.predict_binding_for_epitope(
         peptide_pkl_path,
         protein_pkl_path,
         out_folder,
@@ -454,9 +454,9 @@ def deconvolute_peptides(
     peptide_model_path,
     device,
 ):
-    import fennet_mhc.cli_runners as cli_runners
+    import fennet_mhc.pipeline_api as pipeline_api
 
-    cli_runners.deconvolute_peptides(
+    pipeline_api.deconvolute_peptides(
         peptide_pkl_path, n_centroids, out_folder, peptide_model_path, device
     )
 
