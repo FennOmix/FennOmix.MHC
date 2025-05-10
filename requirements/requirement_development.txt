@@ -1,0 +1,13 @@
+alphabase
+peptdeep
+pydivsufsort
+fair-esm
+matplotlib
+pre-commit
+click
+faiss-cpu
+logomaker
+plotly
+umap
+ipykernel
+pytest
