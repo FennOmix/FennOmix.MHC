@@ -1,4 +1,6 @@
 # CONST CONFIG
-FENNETMHC_HOME : "~/fennet-mhc"
-
-mhc_url: "https://fennomix.lab.westlake.edu.cn/resource/mhc/"
+FENNETMHC_HOME: "~/fennet-mhc"
+peptide_model: "pept_model_v20240819.pt"
+hla_model: "hla_model_v20240819.pt"
+hla_embedding: "hla_embeds_v20240819.pkl"
+hla_url: "https://fennomix.lab.westlake.edu.cn/resource/mhc/model/"
