@@ -30,14 +30,14 @@ def run(ctx, **kwargs):
 
 
 @run.command(
-    "embed-proteins", help="Embed MHC class I proteins using Fennet-MHC HLA encoder"
+    "embed-proteins", help="Embed MHC class I proteins using Fennet-MHC MHC encoder"
 )
 @click.option(
     "--fasta",
     type=click.Path(exists=True),
     required=True,
     help="Path to fasta file containing MHC class I protein sequences. "
-    "    Format: >HLA-A*01:01\nSEQUENCE",
+    "    Format: >A01_01\nSEQUENCE",
 )
 @click.option(
     "--save-pkl-path",
@@ -46,41 +46,33 @@ def run(ctx, **kwargs):
     help="Path to .pkl Binary file for saving MHC protein embeddings.",
 )
 @click.option(
-    "--hla-model-path",
-    type=click.Path(exists=True),
-    default=None,
-    show_default=False,
-    help="Path to model parameter file of HLA encoder module. "
-    "If not provided, a default model will be downloaded and used. ",
-)
-@click.option(
     "--device",
     type=click.Choice(["cpu", "cuda", "mps"]),
     default="cuda",
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
+def embed_proteins(fasta, save_pkl_path, device):
     import fennet_mhc.pipeline_api as pipeline_api
 
-    pipeline_api.embed_proteins(fasta, save_pkl_path, hla_model_path, device)
+    pipeline_api.embed_proteins(fasta, save_pkl_path, device)
 
 
 @run.command(
-    "embed-peptides-fasta",
-    help="Embed peptides that non-specifically digested from fasta using Fennet-MHC peptide encoder",
+    "embed-peptides",
+    help="Embed peptides that non-specifically digested from fasta/tsv using Fennet-MHC peptide encoder",
 )
 @click.option(
-    "--fasta",
+    "--peptide-file-path",
     type=click.Path(exists=True),
     required=True,
-    help="Path to fasta file.",
+    help="Path to fasta/tsv file containing peptides.",
 )
 @click.option(
     "--save-pkl-path",
     type=click.Path(),
     required=True,
-    help="Path to .pkl Binary file for saving peptide embeddings.",
+    help="Path to .pkl file for saving peptide embeddings.",
 )
 @click.option(
     "--min-peptide-length",
@@ -97,123 +89,39 @@ def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
     help="Maximum peptide length.",
 )
 @click.option(
-    "--peptide-model-path",
-    type=click.Path(exists=True),
-    default=None,
-    show_default=False,
-    help="Path to peptide model parameter file. "
-    "If not provided, a default model will be downloaded and used. ",
-)
-@click.option(
     "--device",
     type=click.Choice(["cpu", "cuda", "mps"]),
     default="cuda",
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def embed_peptides_fasta(
-    fasta,
+def embed_peptides_from_file(
+    peptide_file_path,
     save_pkl_path,
     min_peptide_length,
     max_peptide_length,
-    peptide_model_path,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
-    pipeline_api.embed_peptides_fasta(
-        fasta,
+    pipeline_api.embed_peptides_from_file(
+        peptide_file_path,
         save_pkl_path,
         min_peptide_length,
         max_peptide_length,
-        peptide_model_path,
         device,
     )
 
 
 @run.command(
-    "embed-peptides-tsv",
-    help="Embed peptides from given tsv using Fennet-MHC peptide encoder",
+    "predict-peptide-binders-for-MHC",
+    help="Predict peptide binders to MHC class I molecules",
 )
 @click.option(
-    "--tsv",
+    "--peptide-file-path",
     type=click.Path(exists=True),
     required=True,
-    help="Path to tsv file containing peptide list.",
-)
-@click.option(
-    "--save-pkl-path",
-    type=click.Path(),
-    required=True,
-    help="Path to .pkl Binary file for saving peptide embeddings.",
-)
-@click.option(
-    "--min-peptide-length",
-    type=int,
-    default=8,
-    show_default=True,
-    help="Minimum peptide length.",
-)
-@click.option(
-    "--max-peptide-length",
-    type=int,
-    default=14,
-    show_default=True,
-    help="Maximum peptide length.",
-)
-@click.option(
-    "--peptide-model-path",
-    type=click.Path(exists=True),
-    default=None,
-    show_default=False,
-    help="Path to peptide model parameter file."
-    "If not provided, a default model will be downloaded and used. ",
-)
-@click.option(
-    "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
-    show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
-)
-def embed_peptides_tsv(
-    tsv,
-    save_pkl_path,
-    min_peptide_length,
-    max_peptide_length,
-    peptide_model_path,
-    device,
-):
-    import fennet_mhc.pipeline_api as pipeline_api
-
-    pipeline_api.embed_peptides_tsv(
-        tsv,
-        save_pkl_path,
-        min_peptide_length,
-        max_peptide_length,
-        peptide_model_path,
-        device,
-    )
-
-
-@run.command(
-    "predict-binding-for-MHC",
-    help="Predict binding of peptides to MHC class I molecules",
-)
-@click.option(
-    "--peptide-pkl-path",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to Peptide pre-embeddings file (.pkl).",
-)
-@click.option(
-    "--protein-pkl-path",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to the pre-computed MHC protein embeddings file (.pkl). "
-    "A default embeddings file cotaining 15672 alleles is provided. "
-    "If your desired alleles are not included in the default file, "
-    "you can generate a custom embeddings file using the *embed_proteins* command.",
+    help="Path to tsv file containing peptides or fasta file for non-specific digestion.",
 )
 @click.option(
     "--alleles",
@@ -242,33 +150,19 @@ def embed_peptides_tsv(
     help="Maximum peptide length.",
 )
 @click.option(
-    "--filter-distance",
+    "--distance-threshold",
     type=float,
     default=2,
     show_default=True,
     help="Filter peptide by best allele binding distance.",
 )
 @click.option(
-    "--background-fasta",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to background human proteins fasta file.",
-)
-@click.option(
-    "--hla-model-path",
-    type=click.Path(exists=True),
+    "--hla-file-path",
     default=None,
-    show_default=False,
-    help="Path to HLA model parameter file. "
-    "If not provided, a default model will be downloaded and used. ",
-)
-@click.option(
-    "--peptide-model-path",
-    type=click.Path(exists=True),
-    default=None,
-    show_default=True,
-    help="Path to peptide model parameter file. "
-    "If not provided, a default model will be downloaded and used. ",
+    required=False,
+    help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
+    "If None, a default embeddings file cotaining 15672 alleles is provided. "
+    "If your desired alleles are not included in the default file, ",
 )
 @click.option(
     "--device",
@@ -277,54 +171,38 @@ def embed_peptides_tsv(
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def predict_binding_for_MHC(
-    peptide_pkl_path,
-    protein_pkl_path,
+def predict_peptide_binders_for_MHC(
+    peptide_file_path,
     alleles,
     out_folder,
     min_peptide_length,
     max_peptide_length,
-    filter_distance,
-    background_fasta,
-    hla_model_path,
-    peptide_model_path,
+    distance_threshold,
+    hla_file_path,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
-    pipeline_api.predict_binding_for_MHC(
-        peptide_pkl_path,
-        protein_pkl_path,
+    pipeline_api.predict_peptide_binders_for_MHC(
+        peptide_file_path,
         alleles,
         out_folder,
         min_peptide_length,
         max_peptide_length,
-        filter_distance,
-        background_fasta,
-        hla_model_path,
-        peptide_model_path,
+        distance_threshold,
+        hla_file_path,
         device,
     )
 
 
 @run.command(
-    "predict-binding-for-epitope",
-    help="Predict binding of MHC class I molecules to epitope",
+    "predict-hla-binders-for-epitopes",
+    help="Predict binding of MHC class I molecules to epitopes",
 )
 @click.option(
-    "--peptide-pkl-path",
+    "--peptide-file-path",
     type=click.Path(exists=True),
-    help="Path to Peptide pre-embeddings file (.pkl).",
-)
-@click.option(
-    "--protein-pkl-path",
-    type=click.Path(exists=True),
-    default=None,
-    show_default=False,
-    help="Path to the pre-computed MHC protein embeddings file (.pkl). "
-    "If not provided, a default embeddings file will be used. "
-    "If your desired alleles are not included in the default file, "
-    "you can generate a custom embeddings file using the *embed_proteins* command.",
+    help="Path to tsv file containing peptides or fasta file for non-specific digestion.",
 )
 @click.option(
     "--out-folder",
@@ -342,38 +220,24 @@ def predict_binding_for_MHC(
 @click.option(
     "--max-peptide-length",
     type=int,
-    default=14,
+    default=12,
     show_default=True,
     help="Maximum peptide length.",
 )
 @click.option(
-    "--filter-distance",
+    "--distance-threshold",
     type=float,
     default=2,
     show_default=True,
     help="Filter by binding distance.",
 )
 @click.option(
-    "--background-fasta",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to background human proteins fasta file.",
-)
-@click.option(
-    "--hla-model-path",
-    type=click.Path(exists=True),
+    "--hla-file-path",
     default=None,
-    show_default=False,
-    help="Path to HLA model parameter file. "
-    "If not provided, a default model will be downloaded and used. ",
-)
-@click.option(
-    "--peptide-model-path",
-    type=click.Path(exists=True),
-    default=None,
-    show_default=False,
-    help="Path to peptide model parameter file. "
-    "If not provided, a default model will be downloaded and used. ",
+    help="Path to the pre-computed MHC protein embeddings file (.pkl). "
+    "If None, a default embeddings file will be used. "
+    "If your desired alleles are not included in the default file, "
+    "you can generate a custom embeddings file using the *embed_proteins* command.",
 )
 @click.option(
     "--device",
@@ -382,30 +246,24 @@ def predict_binding_for_MHC(
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def predict_binding_for_epitope(
-    peptide_pkl_path,
-    protein_pkl_path,
+def predict_binders_for_epitopes(
+    peptide_file_path,
     out_folder,
     min_peptide_length,
     max_peptide_length,
-    filter_distance,
-    background_fasta,
-    hla_model_path,
-    peptide_model_path,
+    distance_threshold,
+    hla_file_path,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
-    pipeline_api.predict_binding_for_epitope(
-        peptide_pkl_path,
-        protein_pkl_path,
+    pipeline_api.predict_binders_for_epitopes(
+        peptide_file_path,
         out_folder,
         min_peptide_length,
         max_peptide_length,
-        filter_distance,
-        background_fasta,
-        hla_model_path,
-        peptide_model_path,
+        distance_threshold,
+        hla_file_path,
         device,
     )
 
@@ -415,7 +273,7 @@ def predict_binding_for_epitope(
     help="Peptides deconvolution to clusters with corresponding binding motifs.",
 )
 @click.option(
-    "--peptide-pkl-path",
+    "--peptide-file-path",
     type=click.Path(exists=True),
     help="Path to Peptide pre-embeddings file (.pkl).",
 )
@@ -433,12 +291,26 @@ def predict_binding_for_epitope(
     help="Output folder for the results.",
 )
 @click.option(
-    "--peptide-model-path",
-    type=click.Path(exists=True),
+    "--min-peptide-length",
+    type=int,
+    default=8,
+    show_default=True,
+    help="Minimum peptide length.",
+)
+@click.option(
+    "--max-peptide-length",
+    type=int,
+    default=12,
+    show_default=True,
+    help="Maximum peptide length.",
+)
+@click.option(
+    "--hla-file-path",
     default=None,
-    show_default=False,
-    help="Path to peptide model parameter file. "
-    "If not provided, a default model will be downloaded and used. ",
+    required=False,
+    help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
+    "If None, a default embeddings file cotaining 15672 alleles is provided. "
+    "If your desired alleles are not included in the default file, ",
 )
 @click.option(
     "--device",
@@ -448,16 +320,24 @@ def predict_binding_for_epitope(
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
 def deconvolute_peptides(
-    peptide_pkl_path,
+    peptide_file_path,
     n_centroids,
     out_folder,
-    peptide_model_path,
+    min_peptide_length,
+    max_peptide_length,
+    hla_file_path,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
     pipeline_api.deconvolute_peptides(
-        peptide_pkl_path, n_centroids, out_folder, peptide_model_path, device
+        peptide_file_path,
+        n_centroids,
+        out_folder,
+        min_peptide_length,
+        max_peptide_length,
+        hla_file_path,
+        device,
     )
 
 

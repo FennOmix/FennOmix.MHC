@@ -34,7 +34,7 @@ from fennet_mhc.mhc_utils import NonSpecificDigest
 
 
 class PretrainedModels:
-    def __init__(self, device: str = "gpu"):
+    def __init__(self, device: str = "cuda"):
         self.device = _set_device(device)
         _download_pretrained_models()
         self.hla_encoder = self._load_hla_model()
@@ -52,6 +52,8 @@ class PretrainedModels:
         )
 
     def embed_proteins(self, fasta: str):
+        if not os.path.exists(fasta):
+            raise FileNotFoundError(f"Fasta file not found: {fasta}")
         protein_df = load_fasta_list_as_protein_df([fasta])
         protein_df.rename(columns={"protein_id": "allele"}, inplace=True)
 
@@ -183,7 +185,7 @@ class PretrainedModels:
         peptide_embeddings: np.ndarray,
         min_peptide_length: int = 8,
         max_peptide_length: int = 14,
-        filter_distance: float = 0.4,
+        distance_threshold: float = 0.4,
     ):
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
         valid_indices = np.where(
@@ -223,7 +225,7 @@ class PretrainedModels:
                 "best_peptide_dist": best_peptide_dists,
             }
         )
-        allele_df = allele_df[allele_df["best_peptide_dist"] <= filter_distance]
+        allele_df = allele_df[allele_df["best_peptide_dist"] <= distance_threshold]
         allele_df.sort_values("allele", ascending=True, inplace=True, ignore_index=True)
 
         return allele_df
@@ -237,7 +239,7 @@ class PretrainedModels:
         alleles: list,
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
-        filter_distance: float = 0.4,
+        distance_threshold: float = 0.4,
     ):
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
         valid_indices = np.where(
@@ -278,7 +280,7 @@ class PretrainedModels:
         peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist"]]
 
         peptide_df = peptide_df[
-            peptide_df["best_allele_dist"] <= filter_distance
+            peptide_df["best_allele_dist"] <= distance_threshold
         ].sort_values(by="best_allele_dist", ascending=True, ignore_index=True)
 
         return peptide_df
@@ -330,9 +332,11 @@ class PretrainedModels:
         return pept_encoder
 
 
-def embed_proteins(fasta: str, save_pkl_path: str, device: str = "gpu"):
+def embed_proteins(fasta: str, save_pkl_path: str, device: str = "cuda"):
     set_logger(log_file_name=global_settings["log_file_name"])
+
     pretrained_models = PretrainedModels(device=device)
+
     protein_df, hla_embeds = pretrained_models.embed_proteins(fasta)
 
     with open(save_pkl_path, "wb") as f:
@@ -348,10 +352,12 @@ def embed_peptides_from_file(
     save_pkl_path: str,
     min_peptide_length: int = 8,
     max_peptide_length: int = 14,
-    device: str = "gpu",
+    device: str = "cuda",
 ):
     set_logger(log_file_name=global_settings["log_file_name"])
+
     pretrained_models = PretrainedModels(device=device)
+
     if peptide_file_path.lower().endswith(".fasta"):
         peptide_list, peptide_embeds = pretrained_models.embed_peptides_from_fasta(
             peptide_file_path, min_peptide_length, max_peptide_length
@@ -371,58 +377,23 @@ def embed_peptides_from_file(
 
 def predict_peptide_binders_for_MHC(
     peptide_file_path: str,
-    hla_file_path: str,
     alleles: list,
     out_folder: str,
     min_peptide_length: int = 8,
     max_peptide_length: int = 12,
-    filter_distance: float = 0.4,
-    device: str = "gpu",
+    distance_threshold: float = 0.4,
+    hla_file_path: str = None,
+    device: str = "cuda",
 ):
     set_logger(log_file_name=global_settings["log_file_name"])
+
     pretrained_models = PretrainedModels(device=device)
 
-    if not os.path.exists(peptide_file_path):
-        raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
-    if peptide_file_path.lower().endswith(".pkl"):
-        try:
-            with open(peptide_file_path, "rb") as f:
-                data_dict = pickle.load(f)
-                peptide_list = data_dict["peptide_list"]
-                pept_embeds = data_dict["pept_embeds"]
-        except Exception as e:
-            raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
-    elif peptide_file_path.lower().endswith(".fasta"):
-        peptide_list, pept_embeds = pretrained_models.embed_peptides_from_fasta(
-            peptide_file_path, min_peptide_length, max_peptide_length
-        )
-    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
-        peptide_list, pept_embeds = pretrained_models.embed_peptides_tsv(
-            peptide_file_path, min_peptide_length, max_peptide_length
-        )
-    else:
-        raise ValueError(
-            f"Unsupported peptide file format: {peptide_file_path}. "
-            "Please provide a .pkl, .fasta or .tsv file."
-        )
+    peptide_list, pept_embeds = _load_peptide_embeddings(
+        pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
+    )
 
-    if not os.path.exists(hla_file_path):
-        raise FileNotFoundError(f"MHC file not found: {hla_file_path}")
-    if hla_file_path.lower().endswith(".pkl"):
-        try:
-            with open(hla_file_path, "rb") as f:
-                data_dict = pickle.load(f)
-                protein_df = data_dict["protein_df"]
-                hla_embeds = data_dict["embeds"]
-        except Exception as e:
-            raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
-    elif hla_file_path.lower().endswith(".fasta"):
-        protein_df, hla_embeds = pretrained_models.embed_proteins(hla_file_path)
-    else:
-        raise ValueError(
-            f"Unsupported MHC file format: {hla_file_path}. "
-            "Please provide a .pkl or .fasta file."
-        )
+    protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
     peptide_df = pretrained_models.predict_peptide_binders_for_MHC(
         protein_df,
@@ -432,7 +403,7 @@ def predict_peptide_binders_for_MHC(
         alleles=alleles,
         min_peptide_length=min_peptide_length,
         max_peptide_length=max_peptide_length,
-        filter_distance=filter_distance,
+        distance_threshold=distance_threshold,
     )
 
     peptide_df = peptide_df.round(3)
@@ -445,57 +416,22 @@ def predict_peptide_binders_for_MHC(
 
 def predict_binders_for_epitopes(
     peptide_file_path: str,
-    hla_file_path: str,
     out_folder: str,
     min_peptide_length: int = 8,
     max_peptide_length: int = 12,
-    filter_distance: float = 0.4,
-    device: str = "gpu",
+    distance_threshold: float = 0.4,
+    hla_file_path: str = None,
+    device: str = "cuda",
 ):
     set_logger(log_file_name=global_settings["log_file_name"])
+
     pretrained_models = PretrainedModels(device=device)
 
-    if not os.path.exists(peptide_file_path):
-        raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
-    if peptide_file_path.lower().endswith(".pkl"):
-        try:
-            with open(peptide_file_path, "rb") as f:
-                data_dict = pickle.load(f)
-                peptide_list = data_dict["peptide_list"]
-                pept_embeds = data_dict["pept_embeds"]
-        except Exception as e:
-            raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
-    elif peptide_file_path.lower().endswith(".fasta"):
-        peptide_list, pept_embeds = pretrained_models.embed_peptides_from_fasta(
-            peptide_file_path, min_peptide_length, max_peptide_length
-        )
-    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
-        peptide_list, pept_embeds = pretrained_models.embed_peptides_tsv(
-            peptide_file_path, min_peptide_length, max_peptide_length
-        )
-    else:
-        raise ValueError(
-            f"Unsupported peptide file format: {peptide_file_path}. "
-            "Please provide a .pkl, .fasta or .tsv file."
-        )
+    peptide_list, pept_embeds = _load_peptide_embeddings(
+        pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
+    )
 
-    if not os.path.exists(hla_file_path):
-        raise FileNotFoundError(f"MHC file not found: {hla_file_path}")
-    if hla_file_path.lower().endswith(".pkl"):
-        try:
-            with open(hla_file_path, "rb") as f:
-                data_dict = pickle.load(f)
-                protein_df = data_dict["protein_df"]
-                hla_embeds = data_dict["embeds"]
-        except Exception as e:
-            raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
-    elif hla_file_path.lower().endswith(".fasta"):
-        protein_df, hla_embeds = pretrained_models.embed_proteins(hla_file_path)
-    else:
-        raise ValueError(
-            f"Unsupported MHC file format: {hla_file_path}. "
-            "Please provide a .pkl or .fasta file."
-        )
+    protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
     allele_df = pretrained_models.predict_MHC_binders_for_epitopes(
         protein_df,
@@ -504,7 +440,7 @@ def predict_binders_for_epitopes(
         pept_embeds,
         min_peptide_length=min_peptide_length,
         max_peptide_length=max_peptide_length,
-        filter_distance=filter_distance,
+        distance_threshold=distance_threshold,
     )
 
     allele_df = allele_df.round(3)
@@ -517,51 +453,22 @@ def predict_binders_for_epitopes(
 
 def deconvolute_peptides(
     peptide_file_path: str,
-    hla_file_path: str,
     n_centroids: int,
     out_folder: str,
     min_peptide_length: int = 8,
     max_peptide_length: int = 12,
-    device: str = "gpu",
+    hla_file_path: str = None,
+    device: str = "cuda",
 ):
-    pretrained_models = PretrainedModels(device=device)
-    if not os.path.exists(peptide_file_path):
-        raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
-    if peptide_file_path.lower().endswith(".pkl"):
-        try:
-            with open(peptide_file_path, "rb") as f:
-                data_dict = pickle.load(f)
-                peptide_list = data_dict["peptide_list"]
-                pept_embeds = data_dict["pept_embeds"]
-        except Exception as e:
-            raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
-    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
-        peptide_list, pept_embeds = pretrained_models.embed_peptides_tsv(
-            peptide_file_path, min_peptide_length, max_peptide_length
-        )
-    else:
-        raise ValueError(
-            f"Unsupported peptide file format: {peptide_file_path}. "
-            "Please provide a .pkl or .tsv (.csv) file."
-        )
+    set_logger(log_file_name=global_settings["log_file_name"])
 
-    if not os.path.exists(hla_file_path):
-        raise FileNotFoundError(f"MHC file not found: {hla_file_path}")
-    if hla_file_path.lower().endswith(".pkl"):
-        try:
-            with open(hla_file_path, "rb") as f:
-                data_dict = pickle.load(f)
-                protein_df = data_dict["protein_df"]
-                hla_embeds = data_dict["embeds"]
-        except Exception as e:
-            raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
-    elif hla_file_path.lower().endswith(".fasta"):
-        protein_df, hla_embeds = pretrained_models.embed_proteins(hla_file_path)
-    else:
-        raise ValueError(
-            f"Unsupported MHC file format: {hla_file_path}. "
-            "Please provide a .pkl or .fasta file."
-        )
+    pretrained_models = PretrainedModels(device=device)
+
+    peptide_list, pept_embeds = _load_peptide_embeddings(
+        pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
+    )
+
+    protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
     cluster_df, centroids = pretrained_models.deconvolute_peptides(
         peptide_list,
@@ -671,9 +578,59 @@ def _download_pretrained_models(
         raise RuntimeError(f"Failed to download models: {e}") from e
 
 
-def load_hla_embedding_pkl(fname=None):
+def _load_protein_embeddings(pretrained_models, hla_file_path):
+    if hla_file_path is None or hla_file_path.lower().endswith(".pkl"):
+        try:
+            return _load_hla_embedding_pkl(hla_file_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
+    elif hla_file_path.lower().endswith(".fasta"):
+        return pretrained_models.embed_proteins(hla_file_path)
+    else:
+        raise ValueError(
+            f"Unsupported MHC file format: {hla_file_path}. "
+            "Please provide a .pkl or .fasta file."
+        )
+
+
+def _load_peptide_embeddings(
+    pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
+):
+    if not os.path.exists(peptide_file_path):
+        raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
+    if peptide_file_path.lower().endswith(".pkl"):
+        try:
+            with open(peptide_file_path, "rb") as f:
+                data_dict = pickle.load(f)
+                return data_dict["peptide_list"], data_dict["pept_embeds"]
+        except Exception as e:
+            raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+    elif peptide_file_path.lower().endswith(".fasta"):
+        return pretrained_models.embed_peptides_from_fasta(
+            peptide_file_path, min_peptide_length, max_peptide_length
+        )
+    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
+        return pretrained_models.embed_peptides_tsv(
+            peptide_file_path, min_peptide_length, max_peptide_length
+        )
+    else:
+        raise ValueError(
+            f"Unsupported peptide file format: {peptide_file_path}. "
+            "Please provide a .pkl or .tsv (.csv) file."
+        )
+
+
+def _load_hla_embedding_pkl(fname=None):
     if fname is None:
         fname = HLA_EMBEDDING_PATH
+    if not os.path.exists(fname):
+        raise FileNotFoundError(f".pkl file not found: {fname}")
     with open(fname, "rb") as f:
         _dict = pickle.load(f)
-        return _dict["protein_df"], _dict["embedding_list"]
+        return _dict["protein_df"], _dict["embeds"]
+
+
+def load_peptide_embedding_pkl(fname):
+    with open(fname, "rb") as f:
+        _dict = pickle.load(f)
+        return _dict["peptide_list"], _dict["pept_embeds"]
