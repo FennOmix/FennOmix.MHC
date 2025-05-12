@@ -4,7 +4,7 @@ from alphabase.yaml_utils import load_yaml
 
 CONST_FOLDER = os.path.dirname(__file__)
 
-global_settings = load_yaml(os.path.join(CONST_FOLDER, "default_settings.yaml"))
+global_settings = load_yaml(os.path.join(CONST_FOLDER, "global_settings.yaml"))
 
 FENNETMHC_HOME = os.path.expanduser(global_settings["FENNETMHC_HOME"])
 
@@ -15,3 +15,7 @@ HLA_MODEL_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings["hla_model"])
 PEPTIDE_MODEL_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings["peptide_model"])
 
 HLA_EMBEDDING_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings["hla_embedding"])
+
+BACKGROUND_FASTA_PATH = os.path.join(
+    FENNETMHC_MODEL_DIR, global_settings["background_fasta"]
+)

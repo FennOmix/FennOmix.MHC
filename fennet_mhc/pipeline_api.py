@@ -1,7 +1,9 @@
 # We use pipeline_api to avoid unnecessary imports of cli
+import logging
 import os
 import pickle
-from datetime import datetime
+import ssl
+import urllib.request
 from pathlib import Path
 
 import esm
@@ -11,7 +13,16 @@ import pandas as pd
 import torch
 import tqdm
 from alphabase.protein.fasta import load_fasta_list_as_protein_df
+from peptdeep.utils import _get_delimiter, set_logger
 
+from fennet_mhc.constants._const import (
+    BACKGROUND_FASTA_PATH,
+    FOUNDATION_MODEL_DIR,
+    HLA_EMBEDDING_PATH,
+    HLA_MODEL_PATH,
+    PEPTIDE_MODEL_PATH,
+    global_settings,
+)
 from fennet_mhc.mhc_binding_model import (
     ModelHlaEncoder,
     ModelSeqEncoder,
@@ -19,62 +30,310 @@ from fennet_mhc.mhc_binding_model import (
     embed_peptides,
 )
 from fennet_mhc.mhc_binding_retriever import MHCBindingRetriever
-from fennet_mhc.mhc_utils import FOUNDATION_MODEL_DIR, NonSpecificDigest, prepare_models
+from fennet_mhc.mhc_utils import NonSpecificDigest
 
 
-def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
-    device = set_device(device)
+class PretrainedModels:
+    def __init__(self, device="gpu"):
+        self.device = _set_device(device)
+        _download_pretrained_models()
+        self.hla_encoder = self._load_hla_model(device=device)
+        self.pept_encoder = self._load_peptide_model(device=device)
+        self.hla_encoder.eval()
+        self.pept_encoder.eval()
 
-    protein_df = load_fasta_list_as_protein_df([fasta])
-    protein_df.rename(columns={"protein_id": "allele"}, inplace=True)
+        self.esm2_model, self.esm2_alphabet = esm.pretrained.esm2_t12_35M_UR50D()
+        self.esm2_model.to(device)
+        self.esm2_model.eval()
+        self.batch_converter = self.esm2_alphabet.get_batch_converter()
 
-    esm2_model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
-    esm2_model.to(device)
-    esm2_model.eval()
-    batch_converter = alphabet.get_batch_converter()
-
-    hla_esm_embedding_list = []
-    batch_size = 100
-
-    with torch.no_grad():
-        for i in tqdm.tqdm(range(0, len(protein_df), batch_size)):
-            sequences = protein_df.sequence.values[i : i + batch_size]
-            data = list(zip(["_"] * len(sequences), sequences, strict=False))
-            batch_labels, batch_strs, batch_tokens = batch_converter(data)
-            results = esm2_model(
-                batch_tokens.to(device), repr_layers=[12], return_contacts=False
-            )
-            hla_esm_embedding_list.extend(
-                list(
-                    results["representations"][12]
-                    .cpu()
-                    .detach()
-                    .numpy()[:, 1:-1]
-                    .copy()
-                )
-            )
-
-    hla_encoder = ModelHlaEncoder().to(device)
-    if hla_model_path is None:
-        default_hla_model_path = os.path.join(FOUNDATION_MODEL_DIR, "HLA_model.pt")
-        # check if downloaded
-        if os.path.exists(default_hla_model_path):
-            hla_model_path = default_hla_model_path
-        else:
-            hla_model_path, _ = prepare_models()
-            if not hla_model_path:
-                return
-
-    try:
-        hla_encoder.load_state_dict(
-            torch.load(hla_model_path, weights_only=True, map_location=device)
+        self.background_protein_df = load_fasta_list_as_protein_df(
+            [BACKGROUND_FASTA_PATH]
         )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
 
-    hla_embeds = embed_hla_esm_list(
-        hla_encoder, hla_esm_embedding_list, device=device, verbose=True
-    )
+    def embed_proteins(self, fasta):
+        protein_df = load_fasta_list_as_protein_df([fasta])
+        protein_df.rename(columns={"protein_id": "allele"}, inplace=True)
+
+        hla_esm_embedding_list = []
+        batch_size = 100
+
+        with torch.no_grad():
+            for i in tqdm.tqdm(range(0, len(protein_df), batch_size)):
+                sequences = protein_df.sequence.values[i : i + batch_size]
+                data = list(zip(["_"] * len(sequences), sequences, strict=False))
+                batch_labels, batch_strs, batch_tokens = self.batch_converter(data)
+                results = self.esm2_model(
+                    batch_tokens.to(self.device),
+                    repr_layers=[12],
+                    return_contacts=False,
+                )
+                hla_esm_embedding_list.extend(
+                    list(
+                        results["representations"][12]
+                        .cpu()
+                        .detach()
+                        .numpy()[:, 1:-1]
+                        .copy()
+                    )
+                )
+
+        hla_embeds = embed_hla_esm_list(
+            self.hla_encoder, hla_esm_embedding_list, device=self.device, verbose=True
+        )
+
+        return protein_df, hla_embeds
+
+    def embed_peptides_from_fasta(
+        self,
+        fasta,
+        min_peptide_length=8,
+        max_peptide_length=14,
+    ):
+        digest = NonSpecificDigest(fasta, (min_peptide_length, max_peptide_length))
+        total_peptides_num = len(digest.digest_starts)
+
+        if total_peptides_num == 0:
+            raise ValueError("No valid peptides found in fasta file")
+
+        batch_size = 1000000
+        batches = range(0, total_peptides_num, batch_size)
+        batches = tqdm.tqdm(batches)
+
+        total_peptide_list = []
+        total_pept_embeds = np.empty((0, 480), dtype=np.float32)
+
+        for start_major in batches:
+            if start_major + batch_size >= total_peptides_num:
+                stop_major = total_peptides_num
+            else:
+                stop_major = start_major + batch_size
+
+            peptide_list = digest.get_peptide_seqs_from_idxes(
+                np.arange(start_major, stop_major)
+            )
+
+            pept_embeds = embed_peptides(
+                self.pept_encoder,
+                peptide_list,
+                d_model=480,
+                batch_size=1024,
+                device=self.device,
+            )
+
+            total_pept_embeds = np.concatenate((total_pept_embeds, pept_embeds), axis=0)
+            total_peptide_list.extend(peptide_list)
+        return total_peptide_list, total_pept_embeds
+
+    def embed_peptides_tsv(
+        self,
+        tsv,
+        min_peptide_length=8,
+        max_peptide_length=14,
+    ):
+        delimiter = _get_delimiter(tsv)
+        input_peptide_df = pd.read_table(tsv, sep=delimiter, index_col=False)
+        before_filter_num = input_peptide_df.shape[0]
+        input_peptide_df["peptide_length"] = input_peptide_df["sequence"].str.len()
+        input_peptide_df = input_peptide_df[
+            (input_peptide_df["peptide_length"] >= min_peptide_length)
+            & (input_peptide_df["peptide_length"] <= max_peptide_length)
+        ]
+        after_filter_num = input_peptide_df.shape[0]
+        if before_filter_num != after_filter_num:
+            print(
+                f"Filter {before_filter_num-after_filter_num} peptides due to invalid length"
+            )
+        input_peptide_list = input_peptide_df["sequence"].tolist()
+
+        if len(input_peptide_list) == 0:
+            raise ValueError("No valid peptides found in tsv file")
+
+        batch_size = 1000000
+        batches = range(0, len(input_peptide_list), batch_size)
+        batches = tqdm.tqdm(batches)
+
+        total_pept_embeds = np.empty((0, 480), dtype=np.float32)
+
+        for start_major in batches:
+            if start_major + batch_size >= len(input_peptide_list):
+                stop_major = len(input_peptide_list)
+            else:
+                stop_major = start_major + batch_size
+
+            peptide_list = input_peptide_list[start_major:stop_major]
+
+            pept_embeds = embed_peptides(
+                self.pept_encoder,
+                peptide_list,
+                d_model=480,
+                batch_size=1024,
+                device=self.device,
+            )
+
+            total_pept_embeds = np.concatenate((total_pept_embeds, pept_embeds), axis=0)
+
+        return input_peptide_list, total_pept_embeds
+
+    def predict_MHC_binders_for_epitopes(
+        self,
+        mhc_df,
+        mhc_embeddings,
+        peptide_list,
+        peptide_embeddings,
+        min_peptide_length=8,
+        max_peptide_length=14,
+        filter_distance=0.4,
+    ):
+        peptide_lengths = np.array([len(pep) for pep in peptide_list])
+        valid_indices = np.where(
+            (peptide_lengths >= min_peptide_length)
+            & (peptide_lengths <= max_peptide_length)
+        )[0]
+        peptide_list = [peptide_list[i] for i in valid_indices]
+        peptide_embeddings = peptide_embeddings[valid_indices, :]
+
+        if len(peptide_list) == 0:
+            raise ValueError("No valid peptide sequences")
+
+        retriever = MHCBindingRetriever(
+            self.hla_encoder,
+            self.pept_encoder,
+            mhc_df,
+            mhc_embeddings,
+            self.background_protein_df,
+            digested_pept_lens=(min_peptide_length, max_peptide_length),
+        )
+
+        all_allele_array = mhc_df["allele"].tolist()
+
+        ret_dists = retriever.get_embedding_distances(
+            mhc_embeddings, peptide_embeddings
+        )
+        best_peptide_idxes = np.argmin(ret_dists, axis=0)
+        best_peptide_dists = ret_dists[
+            best_peptide_idxes, np.arange(ret_dists.shape[1])
+        ]
+        best_peptide_list = [peptide_list[k] for k in best_peptide_idxes]
+
+        allele_df = pd.DataFrame(
+            {
+                "allele": all_allele_array,
+                "best_peptide": best_peptide_list,
+                "best_peptide_dist": best_peptide_dists,
+            }
+        )
+        allele_df = allele_df[allele_df["best_peptide_dist"] <= filter_distance]
+        allele_df.sort_values("allele", ascending=True, inplace=True, ignore_index=True)
+
+        return allele_df
+
+    def predict_peptide_binders_for_MHC(
+        self,
+        hla_df,
+        hla_embeddings,
+        peptide_list,
+        peptide_embeddings,
+        alleles,
+        min_peptide_length,
+        max_peptide_length,
+        filter_distance,
+    ):
+        peptide_lengths = np.array([len(pep) for pep in peptide_list])
+        valid_indices = np.where(
+            (peptide_lengths >= min_peptide_length)
+            & (peptide_lengths <= max_peptide_length)
+        )[0]
+        peptide_list = [peptide_list[i] for i in valid_indices]
+        peptide_embeddings = peptide_embeddings[valid_indices, :]
+
+        if len(peptide_list) == 0:
+            raise ValueError("No valid peptide sequences")
+
+        all_allele_array = hla_df["allele"].unique()
+        alleles = np.array(alleles.split(","))
+        return_check_array = np.isin(alleles, all_allele_array)
+        selected_alleles = []
+        for allele, found in zip(alleles, return_check_array, strict=False):
+            if found:
+                selected_alleles.append(allele)
+            else:
+                logging.warning(
+                    f"Ignore allele '{allele}' which is not available in allele db."
+                )
+
+        retriever = MHCBindingRetriever(
+            self.hla_encoder,
+            self.pept_encoder,
+            hla_df,
+            hla_embeddings,
+            self.background_protein_df,
+            digested_pept_lens=(min_peptide_length, max_peptide_length),
+        )
+        peptide_df = retriever.get_binding_metrics_for_peptides(
+            selected_alleles, peptide_embeddings
+        )
+        peptide_df["sequence"] = peptide_list
+        peptide_df = peptide_df.drop(columns=["best_allele_id"], errors="ignore")
+        peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist"]]
+
+        peptide_df = peptide_df[
+            peptide_df["best_allele_dist"] <= filter_distance
+        ].sort_values(by="best_allele_dist", ascending=True, ignore_index=True)
+
+        return peptide_df
+
+    def deconvolute_peptides(
+        peptide_list,
+        pept_embeddings,
+        n_centroids,
+    ):
+        d = pept_embeddings.shape[1]
+
+        kmeans = faiss.Kmeans(d, n_centroids)
+        kmeans.niter = 20
+        kmeans.verbose = True
+        kmeans.min_points_per_centroid = 10
+        kmeans.max_points_per_centroid = 1000
+
+        kmeans.train(pept_embeddings)
+        centroids = kmeans.centroids
+        trained_index = faiss.IndexFlatL2(d)
+        trained_index.add(centroids)
+
+        return_dists, return_labels = trained_index.search(pept_embeddings, 1)
+        cluster_labels = return_labels.flatten()
+        cluster_dists = return_dists.flatten()
+
+        return pd.DataFrame(
+            {
+                "sequence": peptide_list,
+                "cluster_label": cluster_labels,
+                "cluster_dist": cluster_dists,
+            }
+        ), centroids
+
+    def _load_hla_model(self, device):
+        hla_encoder = ModelHlaEncoder()
+        hla_encoder.to(device)
+        hla_encoder.load_state_dict(
+            torch.load(HLA_MODEL_PATH, weights_only=True, device=device)
+        )
+        return hla_encoder
+
+    def _load_peptide_model(self, device):
+        pept_encoder = ModelSeqEncoder()
+        pept_encoder.to(device)
+        pept_encoder.load_state_dict(
+            torch.load(PEPTIDE_MODEL_PATH, weights_only=True, device=device)
+        )
+        return pept_encoder
+
+
+def embed_proteins(fasta, save_pkl_path, device="gpu"):
+    set_logger(log_file_name=global_settings["log_file_name"])
+    pretrained_models = PretrainedModels(device=device)
+    protein_df, hla_embeds = pretrained_models.embed_proteins(fasta)
 
     with open(save_pkl_path, "wb") as f:
         pickle.dump(
@@ -84,289 +343,115 @@ def embed_proteins(fasta, save_pkl_path, hla_model_path, device):
         )
 
 
-def embed_peptides_fasta(
-    fasta,
+def embed_peptides_from_file(
+    input_file: str,
     save_pkl_path,
-    min_peptide_length,
-    max_peptide_length,
-    peptide_model_path,
-    device,
+    min_peptide_length=8,
+    max_peptide_length=14,
+    device="gpu",
 ):
-    device = set_device(device)
-
-    pept_encoder = ModelSeqEncoder().to(device)
-    if peptide_model_path is None:
-        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
-        # check if downloaded
-        if os.path.exists(default_peptide_model_path):
-            peptide_model_path = default_peptide_model_path
-        else:
-            _, peptide_model_path = prepare_models()
-            if not peptide_model_path:
-                return
-
-    try:
-        pept_encoder.load_state_dict(
-            torch.load(peptide_model_path, weights_only=True, map_location=device)
+    pretrained_models = PretrainedModels(device=device)
+    if input_file.lower().endswith(".fasta"):
+        peptide_list, peptide_embeds = pretrained_models.embed_peptides_from_fasta(
+            input_file, min_peptide_length, max_peptide_length
         )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
-
-    digest = NonSpecificDigest(fasta, (min_peptide_length, max_peptide_length))
-    total_peptides_num = len(digest.digest_starts)
-
-    if total_peptides_num == 0:
-        print("No valid peptides found in fasta file")
-        return
-
-    batch_size = 1000000
-    batches = range(0, total_peptides_num, batch_size)
-    batches = tqdm.tqdm(batches)
-
-    total_peptide_list = []
-    total_pept_embeds = np.empty((0, 480), dtype=np.float32)
-
-    for start_major in batches:
-        if start_major + batch_size >= total_peptides_num:
-            stop_major = total_peptides_num
-        else:
-            stop_major = start_major + batch_size
-
-        peptide_list = digest.get_peptide_seqs_from_idxes(
-            np.arange(start_major, stop_major)
+    elif input_file[-4:].lower() in [".tsv", ".txt", "csv"]:
+        peptide_list, peptide_embeds = pretrained_models.embed_peptides_tsv(
+            input_file, min_peptide_length, max_peptide_length
         )
-
-        pept_embeds = embed_peptides(
-            pept_encoder,
-            peptide_list,
-            d_model=480,
-            batch_size=1024,
-            device=device,
-        )
-
-        total_pept_embeds = np.concatenate((total_pept_embeds, pept_embeds), axis=0)
-        total_peptide_list.extend(peptide_list)
 
     with open(save_pkl_path, "wb") as f:
         pickle.dump(
-            {"peptide_list": total_peptide_list, "pept_embeds": total_pept_embeds},
+            {"peptide_list": peptide_list, "pept_embeds": peptide_embeds},
             f,
             protocol=pickle.HIGHEST_PROTOCOL,
         )
 
 
-def embed_peptides_tsv(
-    tsv,
-    save_pkl_path,
-    min_peptide_length,
-    max_peptide_length,
-    peptide_model_path,
-    device,
-):
-    device = set_device(device)
-
-    pept_encoder = ModelSeqEncoder().to(device)
-    if peptide_model_path is None:
-        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
-        # check if downloaded
-        if os.path.exists(default_peptide_model_path):
-            peptide_model_path = default_peptide_model_path
-        else:
-            _, peptide_model_path = prepare_models()
-            if not peptide_model_path:
-                return
-
-    try:
-        pept_encoder.load_state_dict(
-            torch.load(peptide_model_path, weights_only=True, map_location=device)
-        )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
-
-    input_peptide_df = pd.read_table(tsv, sep="\t", index_col=False)
-    before_filter_num = input_peptide_df.shape[0]
-    input_peptide_df["peptide_length"] = input_peptide_df.iloc[:, 0].str.len()
-    input_peptide_df = input_peptide_df[
-        (input_peptide_df["peptide_length"] >= min_peptide_length)
-        & (input_peptide_df["peptide_length"] <= max_peptide_length)
-    ]
-    after_filter_num = input_peptide_df.shape[0]
-    if before_filter_num != after_filter_num:
-        print(
-            f"Filter {before_filter_num-after_filter_num} peptides due to invalid length"
-        )
-    input_peptide_list = input_peptide_df.iloc[:, 0].tolist()
-
-    if len(input_peptide_list) == 0:
-        print("No valid peptides found in tsv file")
-        return
-
-    batch_size = 1000000
-    batches = range(0, len(input_peptide_list), batch_size)
-    batches = tqdm.tqdm(batches)
-
-    total_pept_embeds = np.empty((0, 480), dtype=np.float32)
-
-    for start_major in batches:
-        if start_major + batch_size >= len(input_peptide_list):
-            stop_major = len(input_peptide_list)
-        else:
-            stop_major = start_major + batch_size
-
-        peptide_list = input_peptide_list[start_major:stop_major]
-
-        pept_embeds = embed_peptides(
-            pept_encoder,
-            peptide_list,
-            d_model=480,
-            batch_size=1024,
-            device=device,
-        )
-
-        total_pept_embeds = np.concatenate((total_pept_embeds, pept_embeds), axis=0)
-
-    with open(save_pkl_path, "wb") as f:
-        pickle.dump(
-            {"peptide_list": input_peptide_list, "pept_embeds": total_pept_embeds},
-            f,
-            protocol=pickle.HIGHEST_PROTOCOL,
-        )
-
-
-def predict_binding_for_MHC(
-    peptide_pkl_path,
-    protein_pkl_path,
+def predict_peptide_binders_for_MHC(
+    peptide_file_path,
+    mhc_file_path,
     alleles,
     out_folder,
     min_peptide_length,
     max_peptide_length,
     filter_distance,
-    background_fasta,
-    hla_model_path,
-    peptide_model_path,
     device,
 ):
-    # check input peptide source
-    try:
-        with open(peptide_pkl_path, "rb") as f:
-            data_dict = pickle.load(f)
-            peptide_list = data_dict["peptide_list"]
-            pept_embeds = data_dict["pept_embeds"]
-    except Exception as e:
-        raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+    pretrained_models = PretrainedModels(device=device)
 
-    peptide_lengths = np.array([len(pep) for pep in peptide_list])
-    valid_indices = np.where(
-        (peptide_lengths >= min_peptide_length)
-        & (peptide_lengths <= max_peptide_length)
-    )[0]
-    peptide_list = [peptide_list[i] for i in valid_indices]
-    pept_embeds = pept_embeds[valid_indices, :]
-
-    if len(peptide_list) == 0:
-        print("No valid peptide sequences")
-        return
-
-    # check input MHC protein source
-    # if protein_pkl_path is None:
-    #     protein_pkl_path = os.path.join(CONST_DIR, "hla_v0819_embeds.pkl")
-
-    try:
-        with open(protein_pkl_path, "rb") as f:
-            data_dict = pickle.load(f)
-            protein_df = data_dict["protein_df"]
-            hla_embeds = data_dict["embeds"]
-    except Exception as e:
-        raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
-
-    all_allele_array = protein_df["allele"].unique()
-    selected_alleles_array = np.array(alleles.split(","))
-    return_check_array = np.isin(selected_alleles_array, all_allele_array)
-    exit_flag = False
-    for allele, result in zip(selected_alleles_array, return_check_array, strict=False):
-        if not result:
-            print(f"The allele {allele} is not available.")
-            exit_flag = True
-    if exit_flag:
-        return
-
-    device = set_device(device)
-
-    if not os.path.exists(out_folder):
-        os.makedirs(out_folder)
-
-    pept_encoder = ModelSeqEncoder().to(device)
-    hla_encoder = ModelHlaEncoder().to(device)
-
-    if peptide_model_path is None:
-        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
-        if os.path.exists(default_peptide_model_path):
-            peptide_model_path = default_peptide_model_path
-        else:
-            _, peptide_model_path = prepare_models()
-            if not peptide_model_path:
-                return
-
-    if hla_model_path is None:
-        default_hla_model_path = os.path.join(FOUNDATION_MODEL_DIR, "HLA_model.pt")
-        if os.path.exists(default_hla_model_path):
-            hla_model_path = default_hla_model_path
-        else:
-            hla_model_path, _ = prepare_models()
-            if not hla_model_path:
-                return
-
-    try:
-        hla_encoder.load_state_dict(
-            torch.load(hla_model_path, weights_only=True, map_location=device)
+    if not os.path.exists(peptide_file_path):
+        raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
+    if peptide_file_path.lower().endswith(".pkl"):
+        try:
+            with open(peptide_file_path, "rb") as f:
+                data_dict = pickle.load(f)
+                peptide_list = data_dict["peptide_list"]
+                pept_embeds = data_dict["pept_embeds"]
+        except Exception as e:
+            raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+    elif peptide_file_path.lower().endswith(".fasta"):
+        peptide_list, pept_embeds = pretrained_models.embed_peptides_from_fasta(
+            peptide_file_path, min_peptide_length, max_peptide_length
         )
-        pept_encoder.load_state_dict(
-            torch.load(peptide_model_path, weights_only=True, map_location=device)
+    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
+        peptide_list, pept_embeds = pretrained_models.embed_peptides_tsv(
+            peptide_file_path, min_peptide_length, max_peptide_length
         )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
+    else:
+        raise ValueError(
+            f"Unsupported peptide file format: {peptide_file_path}. "
+            "Please provide a .pkl, .fasta or .tsv file."
+        )
 
-    retriever = MHCBindingRetriever(
-        hla_encoder,
-        pept_encoder,
+    if not os.path.exists(mhc_file_path):
+        raise FileNotFoundError(f"MHC file not found: {mhc_file_path}")
+    if mhc_file_path.lower().endswith(".pkl"):
+        try:
+            with open(mhc_file_path, "rb") as f:
+                data_dict = pickle.load(f)
+                protein_df = data_dict["protein_df"]
+                hla_embeds = data_dict["embeds"]
+        except Exception as e:
+            raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
+    elif mhc_file_path.lower().endswith(".fasta"):
+        protein_df, hla_embeds = pretrained_models.embed_proteins(mhc_file_path)
+    else:
+        raise ValueError(
+            f"Unsupported MHC file format: {mhc_file_path}. "
+            "Please provide a .pkl or .fasta file."
+        )
+
+    peptide_df = pretrained_models.predict_peptide_binders_for_MHC(
         protein_df,
         hla_embeds,
-        background_fasta,
-        digested_pept_lens=(min_peptide_length, max_peptide_length),
+        peptide_list,
+        pept_embeds,
+        alleles=alleles,
+        min_peptide_length=min_peptide_length,
+        max_peptide_length=max_peptide_length,
+        filter_distance=filter_distance,
     )
-    peptide_df = retriever.get_binding_metrics_for_peptides(
-        selected_alleles_array, pept_embeds
-    )
-    peptide_df["sequence"] = peptide_list
-    peptide_df = peptide_df.drop(columns=["best_allele_id"], errors="ignore")
-    peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist"]]
-    # peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist", "best_allele_rank"]]
-
-    peptide_df = peptide_df[
-        peptide_df["best_allele_dist"] <= filter_distance
-    ].sort_values(by="best_allele_dist", ascending=True)
 
     peptide_df = peptide_df.round(3)
-
+    os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
-    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    output_file_path = output_dir.joinpath(f"peptide_df_for_MHC_{current_time}.tsv")
+    output_file_path = output_dir.joinpath("peptide_df_for_MHC.tsv")
     peptide_df.to_csv(output_file_path, sep="\t", index=False)
     print(f"File saved to: {output_file_path}")
 
 
-def predict_binding_for_epitope(
+def predict_binders_for_epitopes(
     peptide_pkl_path,
     protein_pkl_path,
     out_folder,
-    min_peptide_length,
-    max_peptide_length,
-    filter_distance,
-    background_fasta,
-    hla_model_path,
-    peptide_model_path,
-    device,
+    min_peptide_length=8,
+    max_peptide_length=14,
+    filter_distance=0.4,
+    device="gpu",
 ):
+    set_logger(log_file_name=global_settings["log_file_name"])
+    pretrained_models = PretrainedModels(device=device)
     # check input peptide source
     try:
         with open(peptide_pkl_path, "rb") as f:
@@ -375,174 +460,69 @@ def predict_binding_for_epitope(
             pept_embeds = data_dict["pept_embeds"]
     except Exception as e:
         raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
-
-    peptide_lengths = np.array([len(pep) for pep in peptide_list])
-    valid_indices = np.where(
-        (peptide_lengths >= min_peptide_length)
-        & (peptide_lengths <= max_peptide_length)
-    )[0]
-    peptide_list = [peptide_list[i] for i in valid_indices]
-    pept_embeds = pept_embeds[valid_indices, :]
-
-    if len(peptide_list) == 0:
-        print("No valid peptide sequences")
-        return
-
-    # check input MHC protein source
-    # if protein_pkl_path is None:
-    #     protein_pkl_path = os.path.join(CONST_DIR, "hla_v0819_embeds.pkl")
 
     try:
         with open(protein_pkl_path, "rb") as f:
             data_dict = pickle.load(f)
-            protein_df = data_dict["protein_df"]
+            hla_df = data_dict["protein_df"]
             hla_embeds = data_dict["embeds"]
     except Exception as e:
-        raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
+        raise RuntimeError(f"Failed to load HLA protein embeddings: {e}") from e
 
-    device = set_device(device)
-
-    if not os.path.exists(out_folder):
-        os.makedirs(out_folder)
-
-    pept_encoder = ModelSeqEncoder().to(device)
-    hla_encoder = ModelHlaEncoder().to(device)
-
-    if peptide_model_path is None:
-        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
-        if os.path.exists(default_peptide_model_path):
-            peptide_model_path = default_peptide_model_path
-        else:
-            _, peptide_model_path = prepare_models()
-            if not peptide_model_path:
-                return
-
-    if hla_model_path is None:
-        default_hla_model_path = os.path.join(FOUNDATION_MODEL_DIR, "HLA_model.pt")
-        if os.path.exists(default_hla_model_path):
-            hla_model_path = default_hla_model_path
-        else:
-            hla_model_path, _ = prepare_models()
-            if not hla_model_path:
-                return
-
-    try:
-        hla_encoder.load_state_dict(
-            torch.load(hla_model_path, weights_only=True, map_location=device)
-        )
-        pept_encoder.load_state_dict(
-            torch.load(peptide_model_path, weights_only=True, map_location=device)
-        )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
-
-    retriever = MHCBindingRetriever(
-        hla_encoder,
-        pept_encoder,
-        protein_df,
+    allele_df = pretrained_models.predict_MHC_binders_for_epitopes(
+        hla_df,
         hla_embeds,
-        background_fasta,
-        digested_pept_lens=(min_peptide_length, max_peptide_length),
+        peptide_list,
+        pept_embeds,
+        min_peptide_length=min_peptide_length,
+        max_peptide_length=max_peptide_length,
+        filter_distance=filter_distance,
     )
 
-    all_allele_array = protein_df["allele"].tolist()
-
-    ret_dists = retriever.get_embedding_distances(hla_embeds, pept_embeds)
-    best_peptide_idxes = np.argmin(ret_dists, axis=0)
-    best_peptide_dists = ret_dists[best_peptide_idxes, np.arange(ret_dists.shape[1])]
-    best_peptide_list = [peptide_list[k] for k in best_peptide_idxes]
-
-    allele_df = pd.DataFrame(
-        {
-            "allele": all_allele_array,
-            "best_peptide": best_peptide_list,
-            "best_peptide_dist": best_peptide_dists,
-        }
-    )
-    allele_df = allele_df[allele_df["best_peptide_dist"] <= filter_distance]
     allele_df = allele_df.round(3)
-    allele_df.sort_values("allele", ascending=True, inplace=True)
-
+    os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
-    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    output_file_path = output_dir.joinpath(f"allele_df_for_epitope_{current_time}.tsv")
+    output_file_path = output_dir.joinpath("allele_df_for_epitopes.tsv")
     allele_df.to_csv(output_file_path, sep="\t", index=False)
-    print(f"File saved to: {output_file_path}")
+    logging.info(f"File saved to: {output_file_path}")
 
 
 def deconvolute_peptides(
-    peptide_pkl_path,
+    peptide_file_path,
     n_centroids,
     out_folder,
-    peptide_model_path,
     device,
 ):
-    # check input peptide source
-    try:
-        with open(peptide_pkl_path, "rb") as f:
-            data_dict = pickle.load(f)
-            peptide_list = data_dict["peptide_list"]
-            pept_embeds = data_dict["pept_embeds"]
-    except Exception as e:
-        raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
-
-    if len(peptide_list) == 0:
-        print("No valid peptide sequences")
-        return
-
-    device = set_device(device)
-
-    if not os.path.exists(out_folder):
-        os.makedirs(out_folder)
-
-    pept_encoder = ModelSeqEncoder().to(device)
-
-    if peptide_model_path is None:
-        default_peptide_model_path = os.path.join(FOUNDATION_MODEL_DIR, "pept_model.pt")
-        if os.path.exists(default_peptide_model_path):
-            peptide_model_path = default_peptide_model_path
-        else:
-            _, peptide_model_path = prepare_models()
-            if not peptide_model_path:
-                return
-
-    try:
-        pept_encoder.load_state_dict(
-            torch.load(peptide_model_path, weights_only=True, map_location=device)
+    pretrained_models = PretrainedModels(device=device)
+    if not os.path.exists(peptide_file_path):
+        raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
+    if peptide_file_path.lower().endswith(".pkl"):
+        try:
+            with open(peptide_file_path, "rb") as f:
+                data_dict = pickle.load(f)
+                peptide_list = data_dict["peptide_list"]
+                pept_embeds = data_dict["pept_embeds"]
+        except Exception as e:
+            raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
+    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
+        peptide_list, pept_embeds = pretrained_models.embed_peptides_tsv(
+            peptide_file_path
         )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load model: {e}") from e
+    else:
+        raise ValueError(
+            f"Unsupported peptide file format: {peptide_file_path}. "
+            "Please provide a .pkl or .tsv (.csv) file."
+        )
 
-    d = pept_embeds.shape[1]
-
-    kmeans = faiss.Kmeans(d, n_centroids)
-    kmeans.niter = 20
-    kmeans.verbose = True
-    kmeans.min_points_per_centroid = 10
-    kmeans.max_points_per_centroid = 1000
-
-    kmeans.train(pept_embeds)
-    centroids = kmeans.centroids
-    trained_index = faiss.IndexFlatL2(d)
-    trained_index.add(centroids)
-
-    return_dists, return_labels = trained_index.search(pept_embeds, 1)
-    cluster_labels = return_labels.flatten()
-    cluster_dists = return_dists.flatten()
-
-    cluster_df = pd.DataFrame(
-        {
-            "sequence": peptide_list,
-            "cluster_label": cluster_labels,
-            "cluster_dist": cluster_dists,
-        }
+    cluster_df, centroids = pretrained_models.deconvolute_peptides(
+        peptide_list,
+        pept_embeds,
+        n_centroids,
     )
 
+    os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
-    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    output_file_path = output_dir.joinpath(
-        f"peptides_deconvolution_cluster_df_{current_time}.tsv"
-    )
+    output_file_path = output_dir.joinpath("peptides_deconvolution_cluster_df.tsv")
     cluster_df.to_csv(output_file_path, sep="\t", index=False)
 
     # matplotlib.rcParams["axes.grid"] = False
@@ -559,7 +539,7 @@ def deconvolute_peptides(
     #     plt.savefig(f"{out_folder}/{i}_cluster_motif.svg")
 
 
-def set_device(device: str) -> str:
+def _set_device(device: str) -> str:
     """
     Select the appropriate device based on availability.
 
@@ -578,3 +558,63 @@ def set_device(device: str) -> str:
 
     print(f"Using device: {device}")
     return device
+
+
+def _download_pretrained_models(
+    base_url: str = None, model_dir: str = FOUNDATION_MODEL_DIR
+):
+    """
+    Download pretrained models from a given URL.
+
+    Args:
+        base_url (str): The base URL to download the models from.
+        model_dir (str): The directory to save the downloaded models.
+    """
+    if base_url is None:
+        base_url = global_settings["hla_url"]
+    base_url += "" if base_url.endswith("/") else "/"
+    os.makedirs(model_dir, exist_ok=True)
+
+    peptide_url = base_url + global_settings["peptide_model"]
+    hla_url = base_url + global_settings["hla_model"]
+    hla_embedding_url = base_url + global_settings["hla_embedding"]
+    background_fasta_url = base_url + global_settings["background_fasta"]
+
+    if os.path.exists(HLA_MODEL_PATH) and os.path.exists(PEPTIDE_MODEL_PATH):
+        return
+
+    logging.info(
+        f"Downloading required files from `{peptide_url}`, `{hla_url}`, "
+        f"`{hla_embedding_url}` and `{background_fasta_url}` ..."
+    )
+    try:
+        context = ssl._create_unverified_context()
+        requests = urllib.request.urlopen(peptide_url, context=context, timeout=10)
+        with open(PEPTIDE_MODEL_PATH, "wb") as f:
+            f.write(requests.read())
+
+        requests = urllib.request.urlopen(hla_url, context=context, timeout=10)
+        with open(HLA_MODEL_PATH, "wb") as f:
+            f.write(requests.read())
+
+        requests = urllib.request.urlopen(
+            hla_embedding_url, context=context, timeout=10
+        )
+        with open(HLA_EMBEDDING_PATH, "wb") as f:
+            f.write(requests.read())
+
+        requests = urllib.request.urlopen(
+            background_fasta_url, context=context, timeout=10
+        )
+        with open(BACKGROUND_FASTA_PATH, "wb") as f:
+            f.write(requests.read())
+    except Exception as e:
+        raise RuntimeError(f"Failed to download models: {e}") from e
+
+
+def load_hla_embedding_pkl(fname=None):
+    if fname is None:
+        fname = HLA_EMBEDDING_PATH
+    with open(fname, "rb") as f:
+        _dict = pickle.load(f)
+        return _dict["protein_df"], _dict["embedding_list"]
