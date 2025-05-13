@@ -3,8 +3,8 @@ name: branch-checks
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
+  # push:
+  #   branches: [ main ]
 jobs:
   pre-commit:
     name: Run all pre-commit hooks
