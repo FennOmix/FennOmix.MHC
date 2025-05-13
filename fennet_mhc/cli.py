@@ -197,7 +197,7 @@ def predict_peptide_binders_for_MHC(
 
 @run.command(
     "predict-hla-binders-for-epitopes",
-    help="Predict binding of MHC class I molecules to epitopes",
+    help="Predict binding MHC class I molecules to the given epitopes",
 )
 @click.option(
     "--peptide-file-path",
@@ -270,12 +270,12 @@ def predict_binders_for_epitopes(
 
 @run.command(
     "deconvolute-peptides",
-    help="Peptides deconvolution to clusters with corresponding binding motifs.",
+    help="De-convolute peptides into clusters.",
 )
 @click.option(
     "--peptide-file-path",
     type=click.Path(exists=True),
-    help="Path to Peptide pre-embeddings file (.pkl).",
+    help="Path to fasta/peptide_tsv or peptide pre-embedding file (.pkl).",
 )
 @click.option(
     "--n-centroids",
