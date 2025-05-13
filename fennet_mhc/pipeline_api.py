@@ -17,7 +17,7 @@ from peptdeep.utils import _get_delimiter, set_logger
 
 from fennet_mhc.constants._const import (
     BACKGROUND_FASTA_PATH,
-    FOUNDATION_MODEL_DIR,
+    FENNETMHC_MODEL_DIR,
     HLA_EMBEDDING_PATH,
     HLA_MODEL_PATH,
     PEPTIDE_MODEL_PATH,
@@ -50,6 +50,8 @@ class PretrainedModels:
         self.background_protein_df = load_fasta_list_as_protein_df(
             [BACKGROUND_FASTA_PATH]
         )
+        self.hla_df, self.hla_embeddings = _load_hla_embedding_pkl(HLA_EMBEDDING_PATH)
+        self.hla_df.reset_index(drop=True, inplace=True)
 
     def embed_proteins(self, fasta: str):
         if not os.path.exists(fasta):
@@ -129,12 +131,12 @@ class PretrainedModels:
 
     def embed_peptides_tsv(
         self,
-        tsv: str,
+        peptide_tsv: str,
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
     ):
-        delimiter = _get_delimiter(tsv)
-        input_peptide_df = pd.read_table(tsv, sep=delimiter, index_col=False)
+        delimiter = _get_delimiter(peptide_tsv)
+        input_peptide_df = pd.read_table(peptide_tsv, sep=delimiter, index_col=False)
         before_filter_num = input_peptide_df.shape[0]
         input_peptide_df["peptide_length"] = input_peptide_df["sequence"].str.len()
         input_peptide_df = input_peptide_df[
@@ -143,8 +145,8 @@ class PretrainedModels:
         ]
         after_filter_num = input_peptide_df.shape[0]
         if before_filter_num != after_filter_num:
-            print(
-                f"Filter {before_filter_num-after_filter_num} peptides due to invalid length"
+            logging.info(
+                f"Filter {before_filter_num - after_filter_num} peptides due to invalid length"
             )
         input_peptide_list = input_peptide_df["sequence"].tolist()
 
@@ -155,7 +157,7 @@ class PretrainedModels:
         batches = range(0, len(input_peptide_list), batch_size)
         batches = tqdm.tqdm(batches)
 
-        total_pept_embeds = np.empty((0, 480), dtype=np.float32)
+        total_pept_embeds = np.empty((0, self.esm2_model.embed_dim), dtype=np.float32)
 
         for start_major in batches:
             if start_major + batch_size >= len(input_peptide_list):
@@ -168,7 +170,7 @@ class PretrainedModels:
             pept_embeds = embed_peptides(
                 self.pept_encoder,
                 peptide_list,
-                d_model=480,
+                d_model=self.esm2_model.embed_dim,
                 batch_size=1024,
                 device=self.device,
             )
@@ -179,12 +181,12 @@ class PretrainedModels:
 
     def predict_MHC_binders_for_epitopes(
         self,
-        mhc_df: pd.DataFrame,
-        mhc_embeddings: np.ndarray,
         peptide_list: list,
         peptide_embeddings: np.ndarray,
+        hla_df: pd.DataFrame = None,
+        hla_embeddings: np.ndarray = None,
         min_peptide_length: int = 8,
-        max_peptide_length: int = 14,
+        max_peptide_length: int = 12,
         distance_threshold: float = 0.4,
     ):
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
@@ -198,19 +200,23 @@ class PretrainedModels:
         if len(peptide_list) == 0:
             raise ValueError("No valid peptide sequences")
 
+        if hla_df is None or hla_embeddings is None:
+            hla_df = self.hla_df
+            hla_embeddings = self.hla_embeddings
+
         retriever = MHCBindingRetriever(
             self.hla_encoder,
             self.pept_encoder,
-            mhc_df,
-            mhc_embeddings,
+            hla_df,
+            hla_embeddings,
             self.background_protein_df,
             digested_pept_lens=(min_peptide_length, max_peptide_length),
         )
 
-        all_allele_array = mhc_df["allele"].tolist()
+        all_allele_array = hla_df["allele"].tolist()
 
         ret_dists = retriever.get_embedding_distances(
-            mhc_embeddings, peptide_embeddings
+            hla_embeddings, peptide_embeddings
         )
         best_peptide_idxes = np.argmin(ret_dists, axis=0)
         best_peptide_dists = ret_dists[
@@ -232,11 +238,11 @@ class PretrainedModels:
 
     def predict_peptide_binders_for_MHC(
         self,
-        hla_df: pd.DataFrame,
-        hla_embeddings: np.ndarray,
         peptide_list: list,
         peptide_embeddings: np.ndarray,
         alleles: list,
+        hla_df: pd.DataFrame = None,
+        hla_embeddings: np.ndarray = None,
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
         distance_threshold: float = 0.4,
@@ -251,6 +257,10 @@ class PretrainedModels:
 
         if len(peptide_list) == 0:
             raise ValueError("No valid peptide sequences")
+
+        if hla_df is None or hla_embeddings is None:
+            hla_df = self.hla_df
+            hla_embeddings = self.hla_embeddings
 
         all_allele_array = hla_df["allele"].unique()
         alleles = np.array(alleles.split(","))
@@ -319,7 +329,7 @@ class PretrainedModels:
         hla_encoder = ModelHlaEncoder()
         hla_encoder.to(self.device)
         hla_encoder.load_state_dict(
-            torch.load(HLA_MODEL_PATH, weights_only=True, device=self.device)
+            torch.load(HLA_MODEL_PATH, weights_only=True, map_location=self.device)
         )
         return hla_encoder
 
@@ -327,7 +337,7 @@ class PretrainedModels:
         pept_encoder = ModelSeqEncoder()
         pept_encoder.to(self.device)
         pept_encoder.load_state_dict(
-            torch.load(PEPTIDE_MODEL_PATH, weights_only=True, device=self.device)
+            torch.load(PEPTIDE_MODEL_PATH, weights_only=True, map_location=self.device)
         )
         return pept_encoder
 
@@ -351,7 +361,7 @@ def embed_peptides_from_file(
     peptide_file_path: str,
     save_pkl_path: str,
     min_peptide_length: int = 8,
-    max_peptide_length: int = 14,
+    max_peptide_length: int = 12,
     device: str = "cuda",
 ):
     set_logger(log_file_name=global_settings["log_file_name"])
@@ -396,11 +406,11 @@ def predict_peptide_binders_for_MHC(
     protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
     peptide_df = pretrained_models.predict_peptide_binders_for_MHC(
-        protein_df,
-        hla_embeds,
         peptide_list,
         pept_embeds,
         alleles=alleles,
+        hla_df=protein_df,
+        hla_embeddings=hla_embeds,
         min_peptide_length=min_peptide_length,
         max_peptide_length=max_peptide_length,
         distance_threshold=distance_threshold,
@@ -434,10 +444,10 @@ def predict_binders_for_epitopes(
     protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
     allele_df = pretrained_models.predict_MHC_binders_for_epitopes(
-        protein_df,
-        hla_embeds,
         peptide_list,
         pept_embeds,
+        hla_df=protein_df,
+        hla_embeddings=hla_embeds,
         min_peptide_length=min_peptide_length,
         max_peptide_length=max_peptide_length,
         distance_threshold=distance_threshold,
@@ -527,7 +537,7 @@ def _set_device(device: str) -> str:
 
 
 def _download_pretrained_models(
-    base_url: str = None, model_dir: str = FOUNDATION_MODEL_DIR
+    base_url: str = None, model_dir: str = FENNETMHC_MODEL_DIR
 ):
     """
     Download pretrained models from a given URL.
@@ -547,11 +557,15 @@ def _download_pretrained_models(
     background_fasta_url = base_url + global_settings["background_fasta"]
 
     if os.path.exists(HLA_MODEL_PATH) and os.path.exists(PEPTIDE_MODEL_PATH):
+        logging.info("Pretrained models already exist. Skipping download.")
         return
 
     logging.info(
-        f"Downloading required files from `{peptide_url}`, `{hla_url}`, "
-        f"`{hla_embedding_url}` and `{background_fasta_url}` ..."
+        f"Downloading required files ...:\n"
+        f"  `{global_settings['peptide_model']} from `{peptide_url}`\n"
+        f"  `{global_settings['hla_model']} from`{hla_url}`\n"
+        f"  `{global_settings['hla_embedding']} from`{hla_embedding_url}`\n"
+        f"  `{global_settings['background_fasta']} from`{background_fasta_url}`"
     )
     try:
         context = ssl._create_unverified_context()
@@ -578,19 +592,20 @@ def _download_pretrained_models(
         raise RuntimeError(f"Failed to download models: {e}") from e
 
 
-def _load_protein_embeddings(pretrained_models, hla_file_path):
-    if hla_file_path is None or hla_file_path.lower().endswith(".pkl"):
+def _load_protein_embeddings(pretrained_models: PretrainedModels, hla_file_path):
+    if hla_file_path is None:
+        return pretrained_models.hla_df, pretrained_models.hla_embeddings
+    if hla_file_path.lower().endswith(".pkl"):
         try:
             return _load_hla_embedding_pkl(hla_file_path)
         except Exception as e:
             raise RuntimeError(f"Failed to load MHC protein embeddings: {e}") from e
-    elif hla_file_path.lower().endswith(".fasta"):
+    if hla_file_path.lower().endswith(".fasta"):
         return pretrained_models.embed_proteins(hla_file_path)
-    else:
-        raise ValueError(
-            f"Unsupported MHC file format: {hla_file_path}. "
-            "Please provide a .pkl or .fasta file."
-        )
+    raise ValueError(
+        f"Unsupported MHC file format: {hla_file_path}. "
+        "Please provide a .pkl or .fasta file."
+    )
 
 
 def _load_peptide_embeddings(
@@ -605,19 +620,18 @@ def _load_peptide_embeddings(
                 return data_dict["peptide_list"], data_dict["pept_embeds"]
         except Exception as e:
             raise RuntimeError(f"Failed to load Peptide embeddings: {e}") from e
-    elif peptide_file_path.lower().endswith(".fasta"):
+    if peptide_file_path.lower().endswith(".fasta"):
         return pretrained_models.embed_peptides_from_fasta(
             peptide_file_path, min_peptide_length, max_peptide_length
         )
-    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
+    if peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
         return pretrained_models.embed_peptides_tsv(
             peptide_file_path, min_peptide_length, max_peptide_length
         )
-    else:
-        raise ValueError(
-            f"Unsupported peptide file format: {peptide_file_path}. "
-            "Please provide a .pkl or .tsv (.csv) file."
-        )
+    raise ValueError(
+        f"Unsupported peptide file format: {peptide_file_path}. "
+        "Please provide a .pkl or .tsv (.csv) file."
+    )
 
 
 def _load_hla_embedding_pkl(fname=None):
