@@ -1,13 +1,11 @@
-alphabase
-peptdeep
-pydivsufsort
-fair-esm
-matplotlib
-pre-commit
-click
-faiss-cpu
-logomaker
-plotly
-umap
+jupyter
+jupyter_contrib_nbextensions
+
+bump-my-version
+pipdeptree
 ipykernel
-pytest
+
+pre-commit==3.7.0
+#pywin32; sys_platform=='win32'
+
+neptune
