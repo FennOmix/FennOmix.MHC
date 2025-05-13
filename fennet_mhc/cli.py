@@ -29,6 +29,13 @@ def run(ctx, **kwargs):
         click.echo(run.get_help(ctx))
 
 
+@run.command("check", help="Check if the model works (and download the models BTW).")
+def check():
+    import fennet_mhc.pipeline_api as pipeline_api
+
+    pipeline_api.PretrainedModels(device="cpu")
+
+
 @run.command(
     "embed-proteins", help="Embed MHC class I proteins using Fennet-MHC MHC encoder"
 )
