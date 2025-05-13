@@ -19,7 +19,12 @@ def load_peptide_df_from_mixmhcpred(mixmhcpred_dir, rank=2):
 
 
 class NonSpecificDigest:
-    def __init__(self, protein_data: tuple[pd.DataFrame, list, str], lens=[8, 14]):
+    def __init__(
+        self,
+        protein_data: tuple[pd.DataFrame, list, str],
+        min_peptide_len=8,
+        max_peptide_len=14,
+    ):
         if isinstance(protein_data, pd.DataFrame):
             self.cat_protein_sequence = (
                 "$" + "$".join(protein_data.sequence.values) + "$"
@@ -32,7 +37,7 @@ class NonSpecificDigest:
                 "$" + "$".join([_["sequence"] for _ in protein_dict.values()]) + "$"
             )
         self.digest_starts, self.digest_stops = get_substring_indices(
-            self.cat_protein_sequence, lens[0], lens[1]
+            self.cat_protein_sequence, min_peptide_len, max_peptide_len
         )
 
     def get_random_pept_df(self, n=5000):
