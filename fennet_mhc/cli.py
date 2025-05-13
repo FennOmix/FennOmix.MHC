@@ -29,7 +29,10 @@ def run(ctx, **kwargs):
         click.echo(run.get_help(ctx))
 
 
-@run.command("check", help="Check if the model works (and download the models BTW).")
+@run.command(
+    "check",
+    help="Check if this package works, and download the model files if missing.",
+)
 def check():
     import fennet_mhc.pipeline_api as pipeline_api
 
