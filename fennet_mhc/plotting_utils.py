@@ -396,7 +396,9 @@ def plot_motif_multi_mer(
     max_y = np.max(max_y_vals)
     for i, logos in enumerate(logo_plots):
         logos.ax.text(
-            3, max_y + 0.1, f"n={len(df[(df[allele_col]==allele)&(df.nAA==kmers[i])])}"
+            3,
+            max_y + 0.1,
+            f"n={len(df[(df[allele_col] == allele) & (df.nAA == kmers[i])])}",
         )
     adjust_axes(logo_plots, max_y)
     return logo_plots
