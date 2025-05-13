@@ -43,7 +43,7 @@ class PretrainedModels:
         self.pept_encoder.eval()
 
         self.esm2_model, self.esm2_alphabet = esm.pretrained.esm2_t12_35M_UR50D()
-        self.esm2_model.to(device)
+        self.esm2_model.to(self.device)
         self.esm2_model.eval()
         self.batch_converter = self.esm2_alphabet.get_batch_converter()
 

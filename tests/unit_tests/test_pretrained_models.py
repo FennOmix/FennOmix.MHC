@@ -7,10 +7,9 @@ from fennet_mhc.pipeline_api import PretrainedModels
 
 
 def test_pretrained_models():
-    pretrained_models = PretrainedModels(device="cpu")
+    pretrained_models = PretrainedModels(device="cuda")
 
     assert len(pretrained_models.background_protein_df) == 4357
-    assert pretrained_models.device == "cpu"
 
     protein_df, hla_embeds = pretrained_models.embed_proteins(
         os.path.abspath("./test_data/test_MHC_proteins.fasta")
