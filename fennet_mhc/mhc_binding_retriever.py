@@ -127,14 +127,22 @@ class MHCBindingRetriever:
         hla_df,
         hla_embeds: np.ndarray,
         protein_data,
-        digested_pept_lens=(8, 14),
+        min_peptide_len=8,
+        max_peptide_len=14,
         device="cuda",
     ):
         self.hla_encoder = hla_encoder
         self.pept_encoder = pept_encoder
         self.device = get_device(device)[0]
 
-        self.dataset = HlaDataSet(hla_df, [], None, protein_data, digested_pept_lens)
+        self.dataset = HlaDataSet(
+            hla_df,
+            [],
+            None,
+            protein_data,
+            min_peptide_len=min_peptide_len,
+            max_peptide_len=max_peptide_len,
+        )
         self.hla_embeds = hla_embeds
 
         self.n_decoy_samples = 1000000

@@ -115,7 +115,8 @@ class HlaDataSet(Dataset):
         hla_esm_list,
         pept_df,
         protein_data,
-        digested_pept_lens=(8, 14),
+        min_peptide_len=8,
+        max_peptide_len=14,
     ):
         self.hla_esm_list = hla_esm_list
         hla_df["hla_id"] = range(len(hla_df))
@@ -134,7 +135,7 @@ class HlaDataSet(Dataset):
             self.pept_seq_list = self.pept_df.sequence
             self.pept_allele_list = self.pept_df.allele
 
-        self.digest = NonSpecificDigest(protein_data, digested_pept_lens)
+        self.digest = NonSpecificDigest(protein_data, min_peptide_len, max_peptide_len)
         self.prob_pept_from_hla_df = 0.8
 
     def _expand_allele_names(self):

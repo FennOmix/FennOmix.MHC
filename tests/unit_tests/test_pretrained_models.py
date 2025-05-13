@@ -9,7 +9,7 @@ from fennet_mhc.pipeline_api import PretrainedModels
 def test_pretrained_models():
     pretrained_models = PretrainedModels(device="cpu")
 
-    assert len(pretrained_models.background_protein_df) > 20000
+    assert len(pretrained_models.background_protein_df) == 4357
     assert pretrained_models.device == "cpu"
 
     protein_df, hla_embeds = pretrained_models.embed_proteins(

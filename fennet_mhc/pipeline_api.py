@@ -94,7 +94,7 @@ class PretrainedModels:
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
     ):
-        digest = NonSpecificDigest(fasta, (min_peptide_length, max_peptide_length))
+        digest = NonSpecificDigest(fasta, min_peptide_length, max_peptide_length)
         total_peptides_num = len(digest.digest_starts)
 
         if total_peptides_num == 0:
@@ -569,13 +569,6 @@ def _download_pretrained_models(
     )
     try:
         context = ssl._create_unverified_context()
-        requests = urllib.request.urlopen(peptide_url, context=context, timeout=10)
-        with open(PEPTIDE_MODEL_PATH, "wb") as f:
-            f.write(requests.read())
-
-        requests = urllib.request.urlopen(hla_url, context=context, timeout=10)
-        with open(HLA_MODEL_PATH, "wb") as f:
-            f.write(requests.read())
 
         requests = urllib.request.urlopen(
             hla_embedding_url, context=context, timeout=10
@@ -587,6 +580,14 @@ def _download_pretrained_models(
             background_fasta_url, context=context, timeout=10
         )
         with open(BACKGROUND_FASTA_PATH, "wb") as f:
+            f.write(requests.read())
+
+        requests = urllib.request.urlopen(peptide_url, context=context, timeout=10)
+        with open(PEPTIDE_MODEL_PATH, "wb") as f:
+            f.write(requests.read())
+
+        requests = urllib.request.urlopen(hla_url, context=context, timeout=10)
+        with open(HLA_MODEL_PATH, "wb") as f:
             f.write(requests.read())
     except Exception as e:
         raise RuntimeError(f"Failed to download models: {e}") from e
