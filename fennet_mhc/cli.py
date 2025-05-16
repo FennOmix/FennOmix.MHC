@@ -50,10 +50,10 @@ def check():
     "    Format: >A01_01\nSEQUENCE",
 )
 @click.option(
-    "--save-pkl-path",
+    "--out-folder",
     type=click.Path(),
     required=True,
-    help="Path to .pkl Binary file for saving MHC protein embeddings.",
+    help="Folder path to save hla_embeddings.pkl.",
 )
 @click.option(
     "--device",
@@ -62,10 +62,10 @@ def check():
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def embed_proteins(fasta, save_pkl_path, device):
+def embed_proteins(fasta, out_folder, device):
     import fennet_mhc.pipeline_api as pipeline_api
 
-    pipeline_api.embed_proteins(fasta, save_pkl_path, device)
+    pipeline_api.embed_proteins(fasta, out_folder, device)
 
 
 @run.command(
@@ -79,10 +79,10 @@ def embed_proteins(fasta, save_pkl_path, device):
     help="Path to fasta/tsv file containing peptides.",
 )
 @click.option(
-    "--save-pkl-path",
+    "--out-folder",
     type=click.Path(),
     required=True,
-    help="Path to .pkl file for saving peptide embeddings.",
+    help="Folder path to save peptide_embeddings.pkl.",
 )
 @click.option(
     "--min-peptide-length",
@@ -107,7 +107,7 @@ def embed_proteins(fasta, save_pkl_path, device):
 )
 def embed_peptides_from_file(
     peptide_file_path,
-    save_pkl_path,
+    out_folder,
     min_peptide_length,
     max_peptide_length,
     device,
@@ -116,7 +116,7 @@ def embed_peptides_from_file(
 
     pipeline_api.embed_peptides_from_file(
         peptide_file_path,
-        save_pkl_path,
+        out_folder,
         min_peptide_length,
         max_peptide_length,
         device,
