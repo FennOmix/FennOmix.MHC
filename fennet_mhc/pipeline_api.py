@@ -210,7 +210,9 @@ class PretrainedModels:
             hla_df,
             hla_embeddings,
             self.background_protein_df,
-            digested_pept_lens=(min_peptide_length, max_peptide_length),
+            min_peptide_length,
+            max_peptide_length,
+            device=self.device,
         )
 
         all_allele_array = hla_df["allele"].tolist()
@@ -263,7 +265,6 @@ class PretrainedModels:
             hla_embeddings = self.hla_embeddings
 
         all_allele_array = hla_df["allele"].unique()
-        alleles = np.array(alleles.split(","))
         return_check_array = np.isin(alleles, all_allele_array)
         selected_alleles = []
         for allele, found in zip(alleles, return_check_array, strict=False):
@@ -280,7 +281,9 @@ class PretrainedModels:
             hla_df,
             hla_embeddings,
             self.background_protein_df,
-            digested_pept_lens=(min_peptide_length, max_peptide_length),
+            min_peptide_len=min_peptide_length,
+            max_peptide_len=max_peptide_length,
+            device=self.device,
         )
         peptide_df = retriever.get_binding_metrics_for_peptides(
             selected_alleles, peptide_embeddings
@@ -389,6 +392,7 @@ def predict_peptide_binders_for_MHC(
     peptide_file_path: str,
     alleles: list,
     out_folder: str,
+    out_fasta: bool = False,
     min_peptide_length: int = 8,
     max_peptide_length: int = 12,
     distance_threshold: float = 0.4,
@@ -416,11 +420,19 @@ def predict_peptide_binders_for_MHC(
         distance_threshold=distance_threshold,
     )
 
-    peptide_df = peptide_df.round(3)
     os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
-    output_file_path = output_dir.joinpath("peptide_df_for_MHC.tsv")
-    peptide_df.to_csv(output_file_path, sep="\t", index=False)
+    if out_fasta:
+        output_file_path = output_dir.joinpath("peptides_for_MHC.fasta")
+        with open(output_file_path, "w") as f:
+            for seq, allele, dist in peptide_df[
+                ["sequence", "best_allele", "best_allele_dist"]
+            ].values:
+                f.write(f">{seq} {allele} dist={dist:.3f}\n{seq}\n")
+    else:
+        peptide_df = peptide_df.round(3)
+        output_file_path = output_dir.joinpath("peptide_df_for_MHC.tsv")
+        peptide_df.to_csv(output_file_path, sep="\t", index=False)
     print(f"File saved to: {output_file_path}")
 
 
@@ -456,7 +468,7 @@ def predict_binders_for_epitopes(
     allele_df = allele_df.round(3)
     os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
-    output_file_path = output_dir.joinpath("allele_df_for_epitopes.tsv")
+    output_file_path = output_dir.joinpath("MHC_df_for_epitopes.tsv")
     allele_df.to_csv(output_file_path, sep="\t", index=False)
     logging.info(f"File saved to: {output_file_path}")
 

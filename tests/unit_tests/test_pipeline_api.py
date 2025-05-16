@@ -3,7 +3,11 @@ import os
 import numpy as np
 import pandas as pd
 
-from fennet_mhc.pipeline_api import PretrainedModels
+from fennet_mhc.pipeline_api import (
+    PretrainedModels,
+    predict_binders_for_epitopes,
+    predict_peptide_binders_for_MHC,
+)
 
 
 def test_pretrained_models():
@@ -47,3 +51,35 @@ def test_pretrained_models():
     peptide_df["TN"] = (peptide_df["dist"] > 0.4) & (peptide_df["Rank_A0201"] > 2)
     agrees = (peptide_df["TP"] | peptide_df["TN"]).astype(float)
     assert agrees.mean() >= 0.95
+
+
+def test_predict_peptide_binders_for_MHC():
+    peptide_tsv = os.path.abspath("./test_data/test_peptides.tsv")
+    predict_peptide_binders_for_MHC(
+        peptide_tsv,
+        ["A02_01"],
+        "nogit",
+        out_fasta=True,
+        min_peptide_length=8,
+        max_peptide_length=12,
+        distance_threshold=0.4,
+        hla_file_path=None,
+        device="cuda",
+    )
+    assert os.path.exists("nogit/peptides_for_MHC.fasta")
+    assert os.path.getsize("nogit/peptides_for_MHC.fasta") > 0
+
+
+def test_predict_binders_for_epitopes():
+    peptide_tsv = os.path.abspath("./test_data/test_peptides.tsv")
+    predict_binders_for_epitopes(
+        peptide_tsv,
+        "nogit",
+        min_peptide_length=8,
+        max_peptide_length=12,
+        distance_threshold=0.4,
+        hla_file_path=None,
+        device="cuda",
+    )
+    assert os.path.exists("nogit/MHC_df_for_epitopes.tsv")
+    assert os.path.getsize("nogit/MHC_df_for_epitopes.tsv") > 0
