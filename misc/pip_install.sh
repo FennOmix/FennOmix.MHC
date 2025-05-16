@@ -2,12 +2,12 @@
 ### Install the package with a given type in a defined conda environment with a define python version,
 ### and call it to check if it works
 ### example usage:
-### ./pip_install.sh stable my_env 3.10
+### ./pip_install.sh stable my_env 3.11
 set -e -u
 
 INSTALL_TYPE=$1 # stable, loose, etc..
 ENV_NAME=${2:-mhc}
-PYTHON_VERSION=${3:-3.10}
+PYTHON_VERSION=${3:-3.11}
 
 conda create -n $ENV_NAME python=$PYTHON_VERSION -y
 
