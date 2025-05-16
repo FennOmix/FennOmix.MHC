@@ -574,30 +574,34 @@ def _download_pretrained_models(
 
     logging.info(
         f"Downloading required files ...:\n"
-        f"  `{global_settings['peptide_model']} from `{peptide_url}`\n"
-        f"  `{global_settings['hla_model']} from`{hla_url}`\n"
-        f"  `{global_settings['hla_embedding']} from`{hla_embedding_url}`\n"
-        f"  `{global_settings['background_fasta']} from`{background_fasta_url}`"
+        f"  `{global_settings['peptide_model']}` from `{peptide_url}`\n"
+        f"  `{global_settings['hla_model']}` from`{hla_url}`\n"
+        f"  `{global_settings['hla_embedding']}` from`{hla_embedding_url}`\n"
+        f"  `{global_settings['background_fasta']}` from`{background_fasta_url}`"
     )
     try:
         context = ssl._create_unverified_context()
 
+        logging.info(f"Downloading `{global_settings['hla_embedding']}` ...")
         requests = urllib.request.urlopen(
             hla_embedding_url, context=context, timeout=10
         )
         with open(HLA_EMBEDDING_PATH, "wb") as f:
             f.write(requests.read())
 
+        logging.info(f"Downloading `{global_settings['background_fasta']}` ...")
         requests = urllib.request.urlopen(
             background_fasta_url, context=context, timeout=10
         )
         with open(BACKGROUND_FASTA_PATH, "wb") as f:
             f.write(requests.read())
 
+        logging.info(f"Downloading `{global_settings['peptide_model']}` ...")
         requests = urllib.request.urlopen(peptide_url, context=context, timeout=10)
         with open(PEPTIDE_MODEL_PATH, "wb") as f:
             f.write(requests.read())
 
+        logging.info(f"Downloading `{global_settings['hla_model']}` ...")
         requests = urllib.request.urlopen(hla_url, context=context, timeout=10)
         with open(HLA_MODEL_PATH, "wb") as f:
             f.write(requests.read())
