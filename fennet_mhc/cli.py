@@ -146,6 +146,9 @@ def embed_peptides_from_file(
     help="Output folder for the results.",
 )
 @click.option(
+    "--out-fasta", is_flag=True, help="If output the results in fasta format."
+)
+@click.option(
     "--min-peptide-length",
     type=int,
     default=8,
@@ -185,6 +188,7 @@ def predict_peptide_binders_for_MHC(
     peptide_file_path,
     alleles,
     out_folder,
+    out_fasta,
     min_peptide_length,
     max_peptide_length,
     distance_threshold,
@@ -193,10 +197,12 @@ def predict_peptide_binders_for_MHC(
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
+    alleles = [x.strip() for x in alleles.split(",")]
     pipeline_api.predict_peptide_binders_for_MHC(
         peptide_file_path,
         alleles,
         out_folder,
+        out_fasta,
         min_peptide_length,
         max_peptide_length,
         distance_threshold,
