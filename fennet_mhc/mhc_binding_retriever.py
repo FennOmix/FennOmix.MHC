@@ -145,7 +145,7 @@ class MHCBindingRetriever:
         )
         self.hla_embeds = hla_embeds
 
-        self.n_decoy_samples = 1000000
+        self.n_decoy_samples = 10000
         self.outlier_threshold = 0.005
         self.use_fmm_fdr = False
         self.decoy_rnd_seed = 1337
