@@ -56,12 +56,21 @@ class PretrainedModels:
     def embed_proteins(self, fasta: str):
         if not os.path.exists(fasta):
             raise FileNotFoundError(f"Fasta file not found: {fasta}")
+        logging.info(f"Loading MHC protein sequences from `{fasta}` ...\n")
         protein_df = load_fasta_list_as_protein_df([fasta])
         protein_df.rename(columns={"protein_id": "allele"}, inplace=True)
 
         hla_esm_embedding_list = []
         batch_size = 100
 
+        logging.info(
+            f"Embedding MHC protein sequences using ESM-2 model ...\n"
+            f"  Total sequences: {len(protein_df)}\n"
+            f"  ESM-2 model: {self.esm2_model.__class__.__name__}\n"
+            f"  ESM-2 model device: {self.device}\n"
+            f"  ESM-2 model embedding dimension: {self.esm2_model.embed_dim}\n"
+            f"  Batch size: {batch_size}\n"
+        )
         with torch.no_grad():
             for i in tqdm.tqdm(range(0, len(protein_df), batch_size)):
                 sequences = protein_df.sequence.values[i : i + batch_size]
@@ -81,7 +90,7 @@ class PretrainedModels:
                         .copy()
                     )
                 )
-
+        logging.info("Embedding MHC proteins after ESM-2 model ...\n")
         hla_embeds = embed_hla_esm_list(
             self.hla_encoder, hla_esm_embedding_list, device=self.device, verbose=True
         )
@@ -94,6 +103,7 @@ class PretrainedModels:
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
     ):
+        logging.info(f"Loading peptide sequences from `{fasta}` ...\n")
         digest = NonSpecificDigest(fasta, min_peptide_length, max_peptide_length)
         total_peptides_num = len(digest.digest_starts)
 
@@ -104,6 +114,11 @@ class PretrainedModels:
         batches = range(0, total_peptides_num, batch_size)
         batches = tqdm.tqdm(batches)
 
+        logging.info(
+            f"Embedding peptide sequences ...\n"
+            f"  Total sequences: {total_peptides_num}\n"
+            f"  Batch size: {batch_size}\n"
+        )
         total_peptide_list = []
         total_pept_embeds = np.empty((0, 480), dtype=np.float32)
 
@@ -135,6 +150,7 @@ class PretrainedModels:
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
     ):
+        logging.info(f"Loading peptide sequences from `{peptide_tsv}` ...\n")
         delimiter = _get_delimiter(peptide_tsv)
         input_peptide_df = pd.read_table(peptide_tsv, sep=delimiter, index_col=False)
         before_filter_num = input_peptide_df.shape[0]
@@ -157,6 +173,11 @@ class PretrainedModels:
         batches = range(0, len(input_peptide_list), batch_size)
         batches = tqdm.tqdm(batches)
 
+        logging.info(
+            f"Embedding peptide sequences ...\n"
+            f"  Total sequences: {len(input_peptide_list)}\n"
+            f"  Batch size: {batch_size}\n"
+        )
         total_pept_embeds = np.empty((0, self.esm2_model.embed_dim), dtype=np.float32)
 
         for start_major in batches:
@@ -189,6 +210,7 @@ class PretrainedModels:
         max_peptide_length: int = 12,
         distance_threshold: float = 0.4,
     ):
+        logging.info("Predicting MHC binders for epitopes ...\n")
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
         valid_indices = np.where(
             (peptide_lengths >= min_peptide_length)
@@ -217,6 +239,11 @@ class PretrainedModels:
 
         all_allele_array = hla_df["allele"].tolist()
 
+        logging.info(
+            "Retrieving MHC binding distances for epitopes ...\n"
+            f"  Total peptide sequences: {len(peptide_list)}\n"
+            f"  MHC protein sequences: {len(hla_df)}\n"
+        )
         ret_dists = retriever.get_embedding_distances(
             hla_embeddings, peptide_embeddings
         )
@@ -249,6 +276,7 @@ class PretrainedModels:
         max_peptide_length: int = 12,
         distance_threshold: float = 0.4,
     ):
+        logging.info("Predicting peptide binders for MHC molecules...\n")
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
         valid_indices = np.where(
             (peptide_lengths >= min_peptide_length)
@@ -264,17 +292,6 @@ class PretrainedModels:
             hla_df = self.hla_df
             hla_embeddings = self.hla_embeddings
 
-        all_allele_array = hla_df["allele"].unique()
-        return_check_array = np.isin(alleles, all_allele_array)
-        selected_alleles = []
-        for allele, found in zip(alleles, return_check_array, strict=False):
-            if found:
-                selected_alleles.append(allele)
-            else:
-                logging.warning(
-                    f"Ignore allele '{allele}' which is not available in allele db."
-                )
-
         retriever = MHCBindingRetriever(
             self.hla_encoder,
             self.pept_encoder,
@@ -285,9 +302,26 @@ class PretrainedModels:
             max_peptide_len=max_peptide_length,
             device=self.device,
         )
+
+        selected_alleles = []
+        for allele in alleles:
+            if allele in retriever.dataset.allele_idxes_dict:
+                selected_alleles.append(allele)
+            else:
+                logging.warning(
+                    f"Ignore allele '{allele}' which is not available in allele library."
+                )
+
+        logging.info(
+            f"Retrieving MHC binding distances for {len(selected_alleles)} alleles ...\n"
+            f"  Total peptide sequences: {len(peptide_list)}\n"
+            f"  MHC protein sequences in database: {len(hla_df)}\n"
+        )
         peptide_df = retriever.get_binding_metrics_for_peptides(
             selected_alleles, peptide_embeddings
         )
+
+        logging.info("Converting resulted peptide_df ...\n")
         peptide_df["sequence"] = peptide_list
         peptide_df = peptide_df.drop(columns=["best_allele_id"], errors="ignore")
         peptide_df = peptide_df[["sequence", "best_allele", "best_allele_dist"]]
@@ -305,6 +339,14 @@ class PretrainedModels:
     ):
         d = pept_embeddings.shape[1]
 
+        logging.info(
+            f"Using faiss.Kmeans to deconvolute peptides ...\n"
+            f"  Total peptide sequences: {len(peptide_list)}\n"
+            f"  Number of clusters: {n_centroids}\n"
+            f"  Number of iterations: {20}\n"
+            f"  Minimum points per centroid: {10}\n"
+            f"  Maximum points per centroid: {1000}\n"
+        )
         kmeans = faiss.Kmeans(d, n_centroids)
         kmeans.niter = 20
         kmeans.verbose = True
@@ -313,9 +355,15 @@ class PretrainedModels:
 
         kmeans.train(pept_embeddings)
         centroids = kmeans.centroids
+        logging.info(f"Got {len(centroids)} clusters ...\n")
+
         trained_index = faiss.IndexFlatL2(d)
         trained_index.add(centroids)
 
+        logging.info(
+            f"Finding the closest cluster for each peptide ...\n"
+            f"  Total peptide sequences: {len(peptide_list)}\n"
+        )
         return_dists, return_labels = trained_index.search(pept_embeddings, 1)
         cluster_labels = return_labels.flatten()
         cluster_dists = return_dists.flatten()
@@ -345,32 +393,44 @@ class PretrainedModels:
         return pept_encoder
 
 
-def embed_proteins(fasta: str, save_pkl_path: str, device: str = "cuda"):
-    set_logger(log_file_name=global_settings["log_file_name"])
+def embed_proteins(fasta: str, out_folder: str, device: str = "cuda"):
+    os.makedirs(out_folder, exist_ok=True)
+    set_logger(
+        log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
+        log_level=global_settings["log_level"].lower(),
+    )
 
     pretrained_models = PretrainedModels(device=device)
 
+    logging.info("Embedding MHC protein sequences ...\n")
     protein_df, hla_embeds = pretrained_models.embed_proteins(fasta)
 
-    with open(save_pkl_path, "wb") as f:
+    logging.info(f"Saving hla_embeddings.pkl to `{out_folder}` ...\n")
+    with open(os.path.join(out_folder, "hla_embeddings.pkl"), "wb") as f:
         pickle.dump(
             {"protein_df": protein_df, "embeds": hla_embeds},
             f,
             protocol=pickle.HIGHEST_PROTOCOL,
         )
+    logging.info("Finished `embed_proteins()`.")
 
 
 def embed_peptides_from_file(
     peptide_file_path: str,
-    save_pkl_path: str,
+    out_folder: str,
     min_peptide_length: int = 8,
     max_peptide_length: int = 12,
     device: str = "cuda",
 ):
-    set_logger(log_file_name=global_settings["log_file_name"])
+    os.makedirs(out_folder, exist_ok=True)
+    set_logger(
+        log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
+        log_level=global_settings["log_level"].lower(),
+    )
 
     pretrained_models = PretrainedModels(device=device)
 
+    logging.info(f"Embedding peptides from file `{peptide_file_path}` ...\n")
     if peptide_file_path.lower().endswith(".fasta"):
         peptide_list, peptide_embeds = pretrained_models.embed_peptides_from_fasta(
             peptide_file_path, min_peptide_length, max_peptide_length
@@ -380,12 +440,14 @@ def embed_peptides_from_file(
             peptide_file_path, min_peptide_length, max_peptide_length
         )
 
-    with open(save_pkl_path, "wb") as f:
+    logging.info(f"Saving peptide_embeddings.pkl to `{out_folder}` ...\n")
+    with open(os.path.join(out_folder, "peptide_embeddings.pkl"), "wb") as f:
         pickle.dump(
             {"peptide_list": peptide_list, "pept_embeds": peptide_embeds},
             f,
             protocol=pickle.HIGHEST_PROTOCOL,
         )
+    logging.info("Finished `embed_peptides_from_file()`.")
 
 
 def predict_peptide_binders_for_MHC(
@@ -399,16 +461,23 @@ def predict_peptide_binders_for_MHC(
     hla_file_path: str = None,
     device: str = "cuda",
 ):
-    set_logger(log_file_name=global_settings["log_file_name"])
+    os.makedirs(out_folder, exist_ok=True)
+    set_logger(
+        log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
+        log_level=global_settings["log_level"].lower(),
+    )
 
     pretrained_models = PretrainedModels(device=device)
 
+    logging.info(f"Loading peptide embeddings from `{peptide_file_path}` ...\n")
     peptide_list, pept_embeds = _load_peptide_embeddings(
         pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
     )
 
+    logging.info(f"Loading MHC protein embeddings from `{hla_file_path}` ...\n")
     protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
+    logging.info("Calling `pretrained_models.predict_peptide_binders_for_MHC()` ...\n")
     peptide_df = pretrained_models.predict_peptide_binders_for_MHC(
         peptide_list,
         pept_embeds,
@@ -420,9 +489,11 @@ def predict_peptide_binders_for_MHC(
         distance_threshold=distance_threshold,
     )
 
-    os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
     if out_fasta:
+        logging.info(
+            f"Saving peptide sequences to `{output_dir}/peptides_for_MHC.fasta` ...\n"
+        )
         output_file_path = output_dir.joinpath("peptides_for_MHC.fasta")
         with open(output_file_path, "w") as f:
             for seq, allele, dist in peptide_df[
@@ -430,10 +501,13 @@ def predict_peptide_binders_for_MHC(
             ].values:
                 f.write(f">{seq} {allele} dist={dist:.3f}\n{seq}\n")
     else:
+        logging.info(
+            f"Saving peptide sequences to `{output_dir}/peptide_df_for_MHC.tsv` ...\n"
+        )
         peptide_df = peptide_df.round(3)
         output_file_path = output_dir.joinpath("peptide_df_for_MHC.tsv")
         peptide_df.to_csv(output_file_path, sep="\t", index=False)
-    print(f"File saved to: {output_file_path}")
+    print(f"Peptide results saved to: {output_file_path}")
 
 
 def predict_binders_for_epitopes(
@@ -445,16 +519,23 @@ def predict_binders_for_epitopes(
     hla_file_path: str = None,
     device: str = "cuda",
 ):
-    set_logger(log_file_name=global_settings["log_file_name"])
+    os.makedirs(out_folder, exist_ok=True)
+    set_logger(
+        log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
+        log_level=global_settings["log_level"].lower(),
+    )
 
     pretrained_models = PretrainedModels(device=device)
 
+    logging.info(f"Loading peptide embeddings from {peptide_file_path} ...\n")
     peptide_list, pept_embeds = _load_peptide_embeddings(
         pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
     )
 
+    logging.info(f"Loading MHC protein embeddings from {hla_file_path} ...\n")
     protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
+    logging.info("Predicting peptide binders for MHC molecules ...\n")
     allele_df = pretrained_models.predict_MHC_binders_for_epitopes(
         peptide_list,
         pept_embeds,
@@ -465,12 +546,12 @@ def predict_binders_for_epitopes(
         distance_threshold=distance_threshold,
     )
 
+    logging.info(f"Saving retrieved hla_df to {out_folder} ...\n")
     allele_df = allele_df.round(3)
-    os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
     output_file_path = output_dir.joinpath("MHC_df_for_epitopes.tsv")
     allele_df.to_csv(output_file_path, sep="\t", index=False)
-    logging.info(f"File saved to: {output_file_path}")
+    logging.info(f"hla_df saved to: {output_file_path}")
 
 
 def deconvolute_peptides(
@@ -482,22 +563,30 @@ def deconvolute_peptides(
     hla_file_path: str = None,
     device: str = "cuda",
 ):
-    set_logger(log_file_name=global_settings["log_file_name"])
+    os.makedirs(out_folder, exist_ok=True)
+    set_logger(
+        log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
+        log_level=global_settings["log_level"].lower(),
+    )
 
     pretrained_models = PretrainedModels(device=device)
 
+    logging.info(f"Loading peptide embeddings from `{peptide_file_path}` ...\n")
     peptide_list, pept_embeds = _load_peptide_embeddings(
         pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
     )
 
+    logging.info(f"Loading MHC protein embeddings from `{hla_file_path}` ...\n")
     protein_df, hla_embeds = _load_protein_embeddings(pretrained_models, hla_file_path)
 
+    logging.info("Calling `pretrained_models.deconvolute_peptides()` ...\n")
     cluster_df, centroids = pretrained_models.deconvolute_peptides(
         peptide_list,
         pept_embeds,
         n_centroids,
     )
 
+    logging.info("Assigning closest MHC protein to each cluster ...\n")
     d = centroids.shape[1]
     trained_index = faiss.IndexFlatL2(d)
     trained_index.add(hla_embeds)
@@ -507,11 +596,14 @@ def deconvolute_peptides(
     cluster_df["closest_allele"] = closest_alleles[cluster_df["cluster_id"].values]
     cluster_df["closest_allele_dist"] = dists.flatten()[cluster_df["cluster_id"].values]
 
+    logging.info(
+        f"Saving peptide clusters to `{out_folder}/peptide_deconvolution_cluster_df.tsv` ...\n"
+    )
     cluster_df = cluster_df.round(3)
-    os.makedirs(out_folder, exist_ok=True)
     output_dir = Path(out_folder)
     output_file_path = output_dir.joinpath("peptide_deconvolution_cluster_df.tsv")
     cluster_df.to_csv(output_file_path, sep="\t", index=False)
+    logging.info(f"Deconvolution results saved to: `{output_file_path}`")
 
     # matplotlib.rcParams["axes.grid"] = False
     # kmers = [8, 9, 10, 11]
