@@ -5,4 +5,12 @@ hla_model: "hla_model_v20240819.pt"
 hla_embedding: "hla_embeds_v20240819.pkl"
 background_fasta: "background.fasta"
 hla_url: "https://fennomix.lab.westlake.edu.cn/resource/mhc/model/"
+
 log_file_name: "fennet_mhc.log"
+log_level: "info"
+log_level_options:
+  - "debug"
+  - "info"
+  - "warning"
+  - "error"
+  - "critical"
