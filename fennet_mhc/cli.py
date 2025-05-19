@@ -73,7 +73,7 @@ def embed_proteins(fasta, out_folder, device):
     help="Embed peptides that non-specifically digested from fasta/tsv using Fennet-MHC peptide encoder",
 )
 @click.option(
-    "--peptide-file-path",
+    "--peptide-file",
     type=click.Path(exists=True),
     required=True,
     help="Path to fasta/tsv file containing peptides.",
@@ -105,8 +105,8 @@ def embed_proteins(fasta, out_folder, device):
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def embed_peptides_from_file(
-    peptide_file_path,
+def embed_peptides(
+    peptide_file,
     out_folder,
     min_peptide_length,
     max_peptide_length,
@@ -115,7 +115,7 @@ def embed_peptides_from_file(
     import fennet_mhc.pipeline_api as pipeline_api
 
     pipeline_api.embed_peptides_from_file(
-        peptide_file_path,
+        peptide_file,
         out_folder,
         min_peptide_length,
         max_peptide_length,
@@ -124,11 +124,11 @@ def embed_peptides_from_file(
 
 
 @run.command(
-    "predict-peptide-binders-for-MHC",
+    "predict-epitopes-for-mhc",
     help="Predict peptide binders to MHC class I molecules",
 )
 @click.option(
-    "--peptide-file-path",
+    "--peptide-file",
     type=click.Path(exists=True),
     required=True,
     help="Path to tsv file containing peptides or fasta file for non-specific digestion.",
@@ -146,7 +146,7 @@ def embed_peptides_from_file(
     help="Output folder for the results.",
 )
 @click.option(
-    "--out-fasta", is_flag=True, help="If output the results in fasta format."
+    "--out-fasta-format", is_flag=True, help="If output the results in fasta format."
 )
 @click.option(
     "--min-peptide-length",
@@ -163,14 +163,14 @@ def embed_peptides_from_file(
     help="Maximum peptide length.",
 )
 @click.option(
-    "--distance-threshold",
+    "--outlier-distance",
     type=float,
-    default=2,
+    default=0.4,
     show_default=True,
     help="Filter peptide by best allele binding distance.",
 )
 @click.option(
-    "--hla-file-path",
+    "--hla-file",
     default=None,
     required=False,
     help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
@@ -184,39 +184,39 @@ def embed_peptides_from_file(
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def predict_peptide_binders_for_MHC(
-    peptide_file_path,
+def predict_epitopes_for_mhc(
+    peptide_file,
     alleles,
     out_folder,
-    out_fasta,
+    out_fasta_format,
     min_peptide_length,
     max_peptide_length,
-    distance_threshold,
-    hla_file_path,
+    outlier_distance,
+    hla_file,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
     alleles = [x.strip() for x in alleles.split(",")]
-    pipeline_api.predict_peptide_binders_for_MHC(
-        peptide_file_path,
+    pipeline_api.predict_epitopes_for_mhc(
+        peptide_file,
         alleles,
         out_folder,
-        out_fasta,
+        out_fasta_format,
         min_peptide_length,
         max_peptide_length,
-        distance_threshold,
-        hla_file_path,
+        outlier_distance,
+        hla_file,
         device,
     )
 
 
 @run.command(
-    "predict-hla-binders-for-epitopes",
+    "predict-mhc-binders-for-epitopes",
     help="Predict binding MHC class I molecules to the given epitopes",
 )
 @click.option(
-    "--peptide-file-path",
+    "--peptide-file",
     type=click.Path(exists=True),
     help="Path to tsv file containing peptides or fasta file for non-specific digestion.",
 )
@@ -236,19 +236,19 @@ def predict_peptide_binders_for_MHC(
 @click.option(
     "--max-peptide-length",
     type=int,
-    default=12,
+    default=14,
     show_default=True,
     help="Maximum peptide length.",
 )
 @click.option(
-    "--distance-threshold",
+    "--outlier-distance",
     type=float,
-    default=2,
+    default=0.4,
     show_default=True,
-    help="Filter by binding distance.",
+    help="Filter outliers by binding distance.",
 )
 @click.option(
-    "--hla-file-path",
+    "--hla-file",
     default=None,
     help="Path to the pre-computed MHC protein embeddings file (.pkl). "
     "If None, a default embeddings file will be used. "
@@ -262,24 +262,24 @@ def predict_peptide_binders_for_MHC(
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
-def predict_binders_for_epitopes(
-    peptide_file_path,
+def predict_mhc_binders_for_epitopes(
+    peptide_file,
     out_folder,
     min_peptide_length,
     max_peptide_length,
-    distance_threshold,
-    hla_file_path,
+    outlier_distance,
+    hla_file,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
-    pipeline_api.predict_binders_for_epitopes(
-        peptide_file_path,
+    pipeline_api.predict_mhc_binders_for_epitopes(
+        peptide_file,
         out_folder,
         min_peptide_length,
         max_peptide_length,
-        distance_threshold,
-        hla_file_path,
+        outlier_distance,
+        hla_file,
         device,
     )
 
@@ -289,7 +289,7 @@ def predict_binders_for_epitopes(
     help="De-convolute peptides into clusters.",
 )
 @click.option(
-    "--peptide-file-path",
+    "--peptide-file",
     type=click.Path(exists=True),
     help="Path to fasta/peptide_tsv or peptide pre-embedding file (.pkl).",
 )
@@ -321,7 +321,7 @@ def predict_binders_for_epitopes(
     help="Maximum peptide length.",
 )
 @click.option(
-    "--hla-file-path",
+    "--hla-file",
     default=None,
     required=False,
     help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
@@ -336,23 +336,118 @@ def predict_binders_for_epitopes(
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
 def deconvolute_peptides(
-    peptide_file_path,
+    peptide_file,
     n_centroids,
     out_folder,
     min_peptide_length,
     max_peptide_length,
-    hla_file_path,
+    hla_file,
     device,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
     pipeline_api.deconvolute_peptides(
-        peptide_file_path,
+        peptide_file,
         n_centroids,
         out_folder,
+        min_peptide_length=min_peptide_length,
+        max_peptide_length=max_peptide_length,
+        outlier_distance=100,  # no distance refinement
+        hla_file_path=hla_file,
+        device=device,
+    )
+
+
+@run.command(
+    "deconvolute-and-predict-peptides",
+    help="De-convolute peptides into clusters, and then predict a peptide library based on the cluster.",
+)
+@click.option(
+    "--peptide-file-to-deconv",
+    type=click.Path(exists=True),
+    help="Path to fasta/peptide_tsv or peptide pre-embedding file (.pkl).",
+)
+@click.option(
+    "--peptide-file-to-predict",
+    type=click.Path(exists=True),
+    help="Path to fasta/peptide_tsv or peptide pre-embedding file (.pkl).",
+)
+@click.option(
+    "--n-centroids",
+    type=int,
+    default=8,
+    show_default=True,
+    help="Number of kmeans centroids to cluster. It's better to add 1-2 to the number you expect, otherwise; some outliers may affect the clustering.",
+)
+@click.option(
+    "--out-folder",
+    type=click.Path(),
+    required=True,
+    help="Output folder for the results.",
+)
+@click.option(
+    "--out-fasta-format", is_flag=True, help="If output the results in fasta format."
+)
+@click.option(
+    "--min-peptide-length",
+    type=int,
+    default=8,
+    show_default=True,
+    help="Minimum peptide length.",
+)
+@click.option(
+    "--max-peptide-length",
+    type=int,
+    default=12,
+    show_default=True,
+    help="Maximum peptide length.",
+)
+@click.option(
+    "--outlier-distance",
+    type=float,
+    default=0.2,
+    show_default=True,
+    help="Distance threshold for outliers.",
+)
+@click.option(
+    "--hla-file",
+    default=None,
+    required=False,
+    help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
+    "If None, a default embeddings file cotaining 15672 alleles is provided. "
+    "If your desired alleles are not included in the default file, ",
+)
+@click.option(
+    "--device",
+    type=click.Choice(["cpu", "cuda", "mps"]),
+    default="cuda",
+    show_default=True,
+    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+)
+def deconvolute_and_predict_peptides(
+    peptide_file_to_deconv,
+    peptide_file_to_predict,
+    n_centroids,
+    out_folder,
+    out_fasta_format,
+    min_peptide_length,
+    max_peptide_length,
+    outlier_distance,
+    hla_file,
+    device,
+):
+    import fennet_mhc.pipeline_api as pipeline_api
+
+    pipeline_api.deconvolute_and_predict_peptides(
+        peptide_file_to_deconv,
+        peptide_file_to_predict,
+        n_centroids,
+        out_folder,
+        out_fasta_format,
         min_peptide_length,
         max_peptide_length,
-        hla_file_path,
+        outlier_distance,
+        hla_file,
         device,
     )
 
