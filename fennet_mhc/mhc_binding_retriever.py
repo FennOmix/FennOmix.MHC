@@ -48,11 +48,11 @@ def get_binding_fdrs(
     decoys_1D: np.ndarray,
     max_fitting_samples=200000,
     random_state=1337,
-    outlier_thredhold=0.01,
+    outlier_threshold=0.01,
     fmm_fdr=False,
 ):
     if fmm_fdr:
-        decoy_fmm = DecoyModel(guassian_outlier_sigma=outlier_thredhold)
+        decoy_fmm = DecoyModel(gaussian_outlier_sigma=outlier_threshold)
         decoy_fmm.fit(decoys_1D)
         if len(distances_1D) >= max_fitting_samples:
             np.random.seed(random_state)
@@ -75,7 +75,7 @@ def get_binding_fdrs(
     else:
         alpha = 1.0 * len(distances_1D) / len(decoys_1D)
         fdrs = get_fdrs(
-            distances_1D, decoys_1D, alpha, remove_rnd_top_rank=outlier_thredhold
+            distances_1D, decoys_1D, alpha, remove_rnd_top_rank=outlier_threshold
         )
 
     fdrs = get_q_values(fdrs, distances_1D)
@@ -101,7 +101,7 @@ def get_binding_fdr_for_best_allele(
             min_allele_distances[selected_alleles],
             rnd_dist[:, i],
             fmm_fdr=fmm_fdr,
-            outlier_thredhold=outlier_threshold,
+            outlier_threshold=outlier_threshold,
         )
         # best_allele_peps[selected_alleles] = peps
         best_allele_fdrs[selected_alleles] = fdrs
@@ -306,7 +306,7 @@ class MHCBindingRetriever:
             best_allele_fdrs[idxes] = get_binding_fdrs(
                 best_allele_dists[idxes],
                 decoy_dists[:, i],
-                outlier_thredhold=self.outlier_threshold,
+                outlier_threshold=self.outlier_threshold,
                 fmm_fdr=self.use_fmm_fdr,
             )
         idxes = (best_allele_dists <= dist_threshold) & (best_allele_fdrs <= fdr)

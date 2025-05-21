@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from fennet_mhc.constants._const import (
     MHC_DF_FOR_EPITOPES_TSV,
@@ -12,6 +13,7 @@ from fennet_mhc.pipeline_api import (
     PretrainedModels,
     predict_epitopes_for_mhc,
     predict_mhc_binders_for_epitopes,
+    _load_peptide_embeddings,
 )
 
 TEST_PEPTIDE_TSV = os.path.abspath("./test_data/test_peptides.tsv")
@@ -119,3 +121,18 @@ def test_predict_binders_for_epitopes():
 #     )
 #     assert os.path.exists(f"{OUT_DIR}/{PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV}")
 #     assert os.path.getsize(f"{OUT_DIR}/{PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV}") > 0
+
+
+class DummyModels:
+    def embed_peptides_from_fasta(self, *args, **kwargs):
+        return [], np.empty((0, 1))
+
+    def embed_peptides_tsv(self, *args, **kwargs):
+        return [], np.empty((0, 1))
+
+
+def test_load_peptide_embeddings_invalid_extension(tmp_path):
+    bad_file = tmp_path / "peptides.bad"
+    bad_file.write_text("AA")
+    with pytest.raises(ValueError):
+        _load_peptide_embeddings(DummyModels(), str(bad_file), 8, 12)

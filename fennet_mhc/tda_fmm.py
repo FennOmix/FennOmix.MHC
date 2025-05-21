@@ -47,7 +47,7 @@ class TDA_fmm:
     def __call__(self, X):
         return self.pdf_mix(X)
 
-    ## Estimate posterior error probilities.
+    ## Estimate posterior error probabilities.
     def pep(self, X, external_pdf=None):
         if self.weights is None or self.external_model is None:
             return np.zeros(len(X))
@@ -122,7 +122,7 @@ class TDA_fmm:
             pp.plot(bins, dis, "r--", linewidth=lw)
             pp.set_title(title + " target")
 
-            # plot false and true distribution seperately
+            # plot false and true distribution separately
             plt.figure()
             pp = plt.subplot()
             dis_false = self.external_model.pdf(bins)
@@ -175,7 +175,7 @@ class TDA_fmm:
             self.n_components + _has_external
         )
 
-        # Response of each components (including the external model),
+        # Response of each component (including the external model),
         # the response: $p_{ik} = w_k*f_k(X_i) / sum(w.*f)$, where k is the kth component.
         post_prob = np.zeros((self.n_components + _has_external, X.shape[0]))
 
@@ -203,7 +203,7 @@ class TDA_fmm:
             ## M-step
             sum_prob = np.sum(post_prob, axis=1)
             sum_prob[sum_prob == 0] = 1e-12
-            # sum all response (R_i) for X_i to estimate the weight of each componets
+            # sum all response (R_i) for X_i to estimate the weight of each component
             new_weights = sum_prob / np.sum(sum_prob)
 
             # New mean is the weighted mean of the responses.
@@ -236,17 +236,17 @@ class TDA_fmm:
 
 
 class DecoyModel(TDA_fmm):
-    def __init__(self, guassian_outlier_sigma, *args, **kwargs):
+    def __init__(self, gaussian_outlier_sigma, *args, **kwargs):
         self.external_model = None
         self.weights = np.array([1.0])
-        self.guassian_outlier_sigma = guassian_outlier_sigma
+        self.gaussian_outlier_sigma = gaussian_outlier_sigma
 
     def fit(self, X):
         self.mu = np.mean(X)
         self.sigma = np.std(X)
 
-        if self.guassian_outlier_sigma:
-            X = X[self.mu - self.guassian_outlier_sigma * self.sigma < X]
+        if self.gaussian_outlier_sigma:
+            X = X[self.mu - self.gaussian_outlier_sigma * self.sigma < X]
             self.mu = np.mean(X)
             self.sigma = np.std(X)
 

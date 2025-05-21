@@ -462,9 +462,14 @@ def embed_peptides_from_file(
         peptide_list, peptide_embeds = pretrained_models.embed_peptides_from_fasta(
             peptide_file_path, min_peptide_length, max_peptide_length
         )
-    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
+    elif peptide_file_path[-4:].lower() in [".tsv", ".txt", ".csv"]:
         peptide_list, peptide_embeds = pretrained_models.embed_peptides_tsv(
             peptide_file_path, min_peptide_length, max_peptide_length
+        )
+    else:
+        raise ValueError(
+            f"Unsupported peptide file format: {peptide_file_path}. "
+            "Please provide a .fasta or .tsv/.csv file."
         )
 
     logging.info(f"Saving peptide_embeddings.pkl to `{out_folder}` ...\n")
@@ -861,13 +866,13 @@ def _load_peptide_embeddings(
         return pretrained_models.embed_peptides_from_fasta(
             peptide_file_path, min_peptide_length, max_peptide_length
         )
-    if peptide_file_path[-4:].lower() in [".tsv", ".txt", "csv"]:
+    if peptide_file_path[-4:].lower() in [".tsv", ".txt", ".csv"]:
         return pretrained_models.embed_peptides_tsv(
             peptide_file_path, min_peptide_length, max_peptide_length
         )
     raise ValueError(
         f"Unsupported peptide file format: {peptide_file_path}. "
-        "Please provide a .pkl or .tsv (.csv) file."
+        "Please provide a .pkl or .tsv/.csv file."
     )
 
 
