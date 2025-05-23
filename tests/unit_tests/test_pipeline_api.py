@@ -11,9 +11,9 @@ from fennet_mhc.constants._const import (
 )
 from fennet_mhc.pipeline_api import (
     PretrainedModels,
+    _load_peptide_embeddings,
     predict_epitopes_for_mhc,
     predict_mhc_binders_for_epitopes,
-    _load_peptide_embeddings,
 )
 
 TEST_PEPTIDE_TSV = os.path.abspath("./test_data/test_peptides.tsv")
