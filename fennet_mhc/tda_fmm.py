@@ -267,7 +267,6 @@ def select_best_fmm(target_scores, decoy_fmm, _max_component_=3, verbose=True):
             best_fmm = target_fmm
         if verbose:
             print(
-                "[Target FMM] G=%d, BIC=%f, best BIC=%f"
-                % (n_component, BIC, best_target_BIC)
+                f"[Target FMM] G={n_component:d}, BIC={BIC:f}, best BIC={best_target_BIC:f}"
             )
     return best_fmm
