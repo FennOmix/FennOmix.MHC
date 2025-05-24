@@ -78,6 +78,10 @@ optional-dependencies.development = { file = [
 
 version = {attr = "fennet_mhc.__version__"}
 
+[tool.ruff.format]
+# Use `\n` line endings for all files
+line-ending = "lf"
+
 [tool.ruff.lint]
 select =  [
     # pycodestyle
