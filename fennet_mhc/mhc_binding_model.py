@@ -71,7 +71,21 @@ def get_cosine_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def get_ascii_indices(seq_array) -> torch.LongTensor:
+def get_ascii_indices(seq_array: list[str]) -> torch.LongTensor:
+    """Convert peptide strings to indices for model input.
+
+    Each character in a peptide sequence is converted to its ASCII integer
+    representation. The resulting indices are returned as a tensor with
+    ``torch.long`` dtype.
+
+    Args:
+        seq_array: A list of peptide sequences.
+
+    Returns:
+        ``torch.LongTensor`` containing ASCII indices with shape
+        ``(len(seq_array), sequence_length)``.
+    """
+
     return torch.tensor(
         np.array(seq_array).view(np.int32).reshape(len(seq_array), -1),
         dtype=torch.long,
@@ -79,7 +93,19 @@ def get_ascii_indices(seq_array) -> torch.LongTensor:
 
 
 class ModelSeqEncoder(torch.nn.Module):
-    def __init__(self, d_model=480, layer_num=4, dropout=0.2):
+    """Encoder module for peptide sequences."""
+
+    def __init__(
+        self, d_model: int = 480, layer_num: int = 4, dropout: float = 0.2
+    ) -> None:
+        """Initialize the sequence encoder.
+
+        Args:
+            d_model: Dimension of the embedding vector.
+            layer_num: Number of Transformer layers used.
+            dropout: Dropout rate applied in the Transformer layers.
+        """
+
         super().__init__()
         self.embedding = ascii_embedding(d_model)
         self.pos_encoder = PositionalEncoding(d_model, max_len=100)
@@ -88,7 +114,17 @@ class ModelSeqEncoder(torch.nn.Module):
         )
         self.out_nn = SeqAttentionSum(d_model)
 
-    def forward(self, aa_idxes):
+    def forward(self, aa_idxes: torch.Tensor) -> torch.Tensor:
+        """Encode a batch of peptide sequences.
+
+        Args:
+            aa_idxes: ``(batch_size, sequence_length)`` tensor containing ASCII
+                indices of peptides.
+
+        Returns:
+            Normalized embedding vectors for each sequence.
+        """
+
         attention_mask = aa_idxes > 0
         x = self.embedding(aa_idxes)
         x = self.pos_encoder(x)
@@ -97,27 +133,62 @@ class ModelSeqEncoder(torch.nn.Module):
 
 
 class ModelHlaEncoder(torch.nn.Module):
-    def __init__(self, d_model=480, layer_num=1, dropout=0.2):
+    """Encoder for HLA embeddings."""
+
+    def __init__(
+        self, d_model: int = 480, layer_num: int = 1, dropout: float = 0.2
+    ) -> None:
+        """Initialize the HLA encoder.
+
+        Args:
+            d_model: Dimension of the HLA embedding.
+            layer_num: Number of Transformer layers.
+            dropout: Dropout rate applied within the Transformer.
+        """
+
         super().__init__()
         self.nn = Hidden_HFace_Transformer(d_model, nlayers=layer_num, dropout=dropout)
         self.out_nn = SeqAttentionSum(d_model)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode a batch of HLA sequence embeddings.
+
+        Args:
+            x: ``(batch_size, seq_len, d_model)`` tensor containing HLA
+                embeddings.
+
+        Returns:
+            Normalized embedding vectors for each HLA input.
+        """
+
         attn_mask = (x != 0).any(dim=2)
         x = self.nn(x, attn_mask)[0] * attn_mask.unsqueeze(-1)
         return torch.nn.functional.normalize(self.out_nn(x))
 
 
 class HlaDataSet(Dataset):
+    """Dataset providing paired HLA embeddings and peptides for training."""
+
     def __init__(
         self,
-        hla_df,
-        hla_esm_list,
-        pept_df,
-        protein_data,
-        min_peptide_len=8,
-        max_peptide_len=14,
-    ):
+        hla_df: pd.DataFrame,
+        hla_esm_list: list[np.ndarray],
+        pept_df: pd.DataFrame | None,
+        protein_data: pd.DataFrame | list | str,
+        min_peptide_len: int = 8,
+        max_peptide_len: int = 14,
+    ) -> None:
+        """Create a new :class:`HlaDataSet` instance.
+
+        Args:
+            hla_df: DataFrame containing HLA information with an ``allele`` column.
+            hla_esm_list: List of ESM embeddings corresponding to ``hla_df`` rows.
+            pept_df: Peptide DataFrame with columns ``sequence`` and ``allele``.
+            protein_data: Protein FASTA path(s) or DataFrame used to generate
+                negative peptides.
+            min_peptide_len: Minimum peptide length for random digestion.
+            max_peptide_len: Maximum peptide length for random digestion.
+        """
         self.hla_esm_list = hla_esm_list
         hla_df["hla_id"] = range(len(hla_df))
         self.allele_idxes_dict: dict = (
@@ -138,7 +209,9 @@ class HlaDataSet(Dataset):
         self.digest = NonSpecificDigest(protein_data, min_peptide_len, max_peptide_len)
         self.prob_pept_from_hla_df = 0.8
 
-    def _expand_allele_names(self):
+    def _expand_allele_names(self) -> None:
+        """Add underscore-free allele names to ``allele_idxes_dict``."""
+
         self.allele_idxes_dict.update(
             [
                 (allele.replace("_", ""), val)
@@ -146,33 +219,42 @@ class HlaDataSet(Dataset):
             ]
         )
 
-    def get_neg_pept(self):
+    def get_neg_pept(self) -> str:
+        """Retrieve a negative peptide sequence."""
+
         if random.random() > self.prob_pept_from_hla_df:
             return self.pept_seq_list[random.randint(0, len(self.pept_seq_list) - 1)]
-        else:
-            idx = random.randint(0, len(self.digest.digest_starts) - 1)
-            return self.digest.cat_protein_sequence[
-                self.digest.digest_starts[idx] : self.digest.digest_stops[idx]
-            ]
+        idx = random.randint(0, len(self.digest.digest_starts) - 1)
+        return self.digest.cat_protein_sequence[
+            self.digest.digest_starts[idx] : self.digest.digest_stops[idx]
+        ]
 
-    def get_allele_embed(self, index):
+    def get_allele_embed(self, index: int) -> np.ndarray:
+        """Get the HLA embedding for the ``index``-th peptide sample."""
+
         alleles = self.pept_allele_list[index]
         allele = alleles[random.randint(0, len(alleles) - 1)]
         hla_ids = self.allele_idxes_dict[allele]
         return self.hla_esm_list[hla_ids[random.randint(0, len(hla_ids) - 1)]]
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> tuple[np.ndarray, str, str]:
+        """Return HLA embedding, positive peptide and random negative peptide."""
+
         return (
             self.get_allele_embed(index),
             self.pept_seq_list[index],
             self.get_neg_pept(),
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Return number of peptide samples."""
+
         return len(self.pept_df)
 
 
-def batchify_hla_esm_list(batch_esm_list):
+def batchify_hla_esm_list(batch_esm_list: list[np.ndarray]) -> torch.Tensor:
+    """Stack a list of variable-length HLA embeddings into a tensor."""
+
     max_hla_len = max(len(x) for x in batch_esm_list)
     hla_x = np.zeros(
         (len(batch_esm_list), max_hla_len, batch_esm_list[0].shape[-1]),
@@ -183,7 +265,11 @@ def batchify_hla_esm_list(batch_esm_list):
     return torch.tensor(hla_x, dtype=torch.float32)
 
 
-def pept_hla_collate(batch):
+def pept_hla_collate(
+    batch: list[tuple[np.ndarray, str, str]],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Collate function for ``HlaDataSet``."""
+
     hla_embeds = [x[0] for x in batch]
     pos_pept_array = [x[1] for x in batch]
     neg_pept_array = [x[2] for x in batch]
@@ -200,7 +286,11 @@ def pept_hla_collate(batch):
     )
 
 
-def get_hla_dataloader(dataset: HlaDataSet, batch_size, shuffle):
+def get_hla_dataloader(
+    dataset: HlaDataSet, batch_size: int, shuffle: bool
+) -> DataLoader:
+    """Create a DataLoader for :class:`HlaDataSet`."""
+
     return DataLoader(
         dataset=dataset,
         collate_fn=pept_hla_collate,
@@ -212,7 +302,11 @@ def get_hla_dataloader(dataset: HlaDataSet, batch_size, shuffle):
 class SiameseCELoss:
     margin: float = 1
 
-    def get_loss(self, hla_x, x, y=1.0):
+    def get_loss(
+        self, hla_x: torch.Tensor, x: torch.Tensor, y: float = 1.0
+    ) -> torch.Tensor:
+        """Compute contrastive loss for a pair of embeddings."""
+
         diff = hla_x - x
         dist_sq = torch.sum(torch.pow(diff, 2), 1)
         dist = torch.sqrt(dist_sq)
@@ -222,8 +316,11 @@ class SiameseCELoss:
         loss = torch.mean(loss) / 2.0
         return loss
 
-    def __call__(self, hla_x, pos_x, neg_x):
-        # euclidian distance
+    def __call__(
+        self, hla_x: torch.Tensor, pos_x: torch.Tensor, neg_x: torch.Tensor
+    ) -> torch.Tensor:
+        """Compute the Siamese loss for positive and negative pairs."""
+
         loss0 = self.get_loss(hla_x, pos_x, 1)
         loss1 = self.get_loss(hla_x, neg_x, 0)
         return (loss0 + loss1) / 2
@@ -233,15 +330,30 @@ def train(
     hla_encoder: ModelHlaEncoder,
     pept_encoder: ModelSeqEncoder,
     dataset: HlaDataSet,
-    batch_size=256,
-    lr=1e-4,
-    epoch=100,
-    warmup_epoch=20,
-    verbose=True,
-    device="cuda",
-    test_bundle=None,
+    batch_size: int = 256,
+    lr: float = 1e-4,
+    epoch: int = 100,
+    warmup_epoch: int = 20,
+    verbose: bool = True,
+    device: str = "cuda",
+    test_bundle: tuple | None = None,
     neptune_run=None,
-):
+) -> None:
+    """Train the peptide/HLA encoders.
+
+    Args:
+        hla_encoder: Encoder for HLA embeddings.
+        pept_encoder: Encoder for peptide sequences.
+        dataset: Training dataset.
+        batch_size: Number of samples per batch.
+        lr: Learning rate for the optimizer.
+        epoch: Total number of epochs.
+        warmup_epoch: Number of warmup epochs for the scheduler.
+        verbose: Whether to print training progress.
+        device: Device identifier for ``torch.device``.
+        test_bundle: Optional tuple of test data passed to :func:`test`.
+        neptune_run: Optional Neptune experiment for logging.
+    """
     loss_func = SiameseCELoss()
     dataloader = get_hla_dataloader(dataset, batch_size, True)
     device = torch.device(device)
@@ -321,8 +433,13 @@ def train(
 
 
 def embed_hla_esm_list(
-    hla_encoder, hla_esm_list, batch_size=200, device=None, verbose=False
-):
+    hla_encoder: ModelHlaEncoder,
+    hla_esm_list: list[np.ndarray],
+    batch_size: int = 200,
+    device: str | torch.device | None = None,
+    verbose: bool = False,
+) -> np.ndarray:
+    """Embed a list of HLA ESM tensors using ``hla_encoder``."""
     if not device:
         device = get_available_device()[0]
     hla_encoder.to(device)
@@ -340,8 +457,14 @@ def embed_hla_esm_list(
 
 
 def embed_peptides(
-    pept_encoder, seqs, d_model=480, batch_size=512, device=None, verbose=False
-):
+    pept_encoder: ModelSeqEncoder,
+    seqs: list[str],
+    d_model: int = 480,
+    batch_size: int = 512,
+    device: str | torch.device | None = None,
+    verbose: bool = False,
+) -> np.ndarray:
+    """Embed a list of peptide sequences."""
     if not device:
         device = get_available_device()[0]
     pept_encoder.to(device)
@@ -361,12 +484,13 @@ def embed_peptides(
 def test(
     test_df: pd.DataFrame,
     test_allele_list,
-    hla_encoder,
-    pept_encoder,
-    hla_df,
-    hla_esm_list,
-    fasta_list,
-):
+    hla_encoder: ModelHlaEncoder,
+    pept_encoder: ModelSeqEncoder,
+    hla_df: pd.DataFrame,
+    hla_esm_list: list[np.ndarray],
+    fasta_list: list[str],
+) -> tuple[float, float, float]:
+    """Evaluate retrieval performance on a test set."""
     from .mhc_binding_retriever import MHCBindingRetriever
 
     hla_embeds = embed_hla_esm_list(hla_encoder, hla_esm_list)
