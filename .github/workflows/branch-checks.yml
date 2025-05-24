@@ -45,7 +45,7 @@ jobs:
 
   run-cli-tests-stable:
     name: Test cli 'stable' on ubuntu-latest
-    needs: pre-commit
+    needs: install-env-stable
     strategy:
       fail-fast: false
       matrix:
