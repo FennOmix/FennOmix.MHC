@@ -1,9 +1,13 @@
+from collections.abc import Sequence
+
 import logomaker as lm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import umap
+from matplotlib.axes import Axes
 from sklearn.manifold import MDS, TSNE
 
 Turbo256 = (
@@ -266,20 +270,61 @@ Turbo256 = (
 )
 
 
-def fit_hla_umap_reducer(hla_embeds, random_state=1337):
+def fit_hla_umap_reducer(
+    hla_embeds: np.ndarray, random_state: int = 1337
+) -> umap.UMAP:
+    """Fit a UMAP reducer on HLA embeddings.
+
+    Args:
+        hla_embeds (np.ndarray): Array of HLA embeddings of shape ``(n, d)``.
+        random_state (int, optional): Random seed for the UMAP algorithm.
+            Defaults to ``1337``.
+
+    Returns:
+        umap.UMAP: The fitted reducer.
+    """
+
     hla_reducer = umap.UMAP(random_state=random_state)
     hla_reducer.fit(hla_embeds)
     return hla_reducer
 
 
-def transform_embeds_to_umap_df(hla_reducer, embeds, alleles):
+def transform_embeds_to_umap_df(
+    hla_reducer: umap.UMAP,
+    embeds: np.ndarray,
+    alleles: Sequence[str],
+) -> pd.DataFrame:
+    """Transform embeddings using a fitted UMAP reducer.
+
+    Args:
+        hla_reducer (umap.UMAP): Reducer fitted with :func:`fit_hla_umap_reducer`.
+        embeds (np.ndarray): Embeddings to project with shape ``(n, d)``.
+        alleles (Sequence[str]): Allele label for each embedding.
+
+    Returns:
+        pandas.DataFrame: UMAP coordinates with an ``allele`` column.
+    """
+
     embedding = hla_reducer.transform(embeds)
     df = pd.DataFrame(embedding, columns=("UMAP1", "UMAP2"))
     df["allele"] = alleles
     return df
 
 
-def transform_matrix_to_mds_df(matrix, labels, seed):
+def transform_matrix_to_mds_df(
+    matrix: np.ndarray, labels: Sequence[str], seed: int
+) -> pd.DataFrame:
+    """Convert a distance matrix to two dimensions using MDS.
+
+    Args:
+        matrix (np.ndarray): Pairwise distance matrix.
+        labels (Sequence[str]): Labels for each sample in ``matrix``.
+        seed (int): Random seed for MDS initialization.
+
+    Returns:
+        pandas.DataFrame: DataFrame with ``MDS1`` and ``MDS2`` columns.
+    """
+
     mds = MDS(
         n_components=2,
         random_state=seed,
@@ -292,7 +337,20 @@ def transform_matrix_to_mds_df(matrix, labels, seed):
     return df
 
 
-def transform_embeds_to_tSNE_df(embeds, labels, seed):
+def transform_embeds_to_tSNE_df(
+    embeds: np.ndarray, labels: Sequence[str], seed: int
+) -> pd.DataFrame:
+    """Project embeddings to two dimensions using t-SNE.
+
+    Args:
+        embeds (np.ndarray): Array of embeddings with shape ``(n, d)``.
+        labels (Sequence[str]): Labels for each embedding.
+        seed (int): Random seed for t-SNE.
+
+    Returns:
+        pandas.DataFrame: DataFrame with ``t-SNE 1`` and ``t-SNE 2`` columns.
+    """
+
     tsne = TSNE(
         n_components=2, random_state=seed, perplexity=30, learning_rate=200, n_iter=1000
     )
@@ -304,14 +362,34 @@ def transform_embeds_to_tSNE_df(embeds, labels, seed):
 
 def plot_umap_df(
     df: pd.DataFrame,
-    color_col,
-    hover_col,
-    size=1,
-    jump_color=True,
-    image_width=700,
-    image_height=600,
-    save_as="",
-):
+    color_col: str,
+    hover_col: str,
+    size: int = 1,
+    jump_color: bool = True,
+    image_width: int = 700,
+    image_height: int = 600,
+    save_as: str = "",
+) -> go.Figure:
+    """Plot UMAP embeddings using Plotly.
+
+    Args:
+        df (pandas.DataFrame): DataFrame produced by
+            :func:`transform_embeds_to_umap_df`.
+        color_col (str): Column used to color the scatter points.
+        hover_col (str): Column shown when hovering over a point.
+        size (int, optional): Marker size. Defaults to ``1``.
+        jump_color (bool, optional): Use a spaced colour palette to
+            differentiate categories. Defaults to ``True``.
+        image_width (int, optional): Width of the image in pixels.
+            Defaults to ``700``.
+        image_height (int, optional): Height of the image in pixels.
+            Defaults to ``600``.
+        save_as (str, optional): File path to save the figure as a static
+            image. If empty the figure is not saved.
+
+    Returns:
+        plotly.graph_objs.Figure: The generated scatter plot.
+    """
     factors = df[color_col].drop_duplicates().to_list()
     color_mapping = {}
     for i, factor in enumerate(factors):
@@ -360,15 +438,33 @@ def plot_umap_df(
 
 
 def plot_motif_multi_mer(
-    df,
-    allele_col,
-    allele,
-    kmers,
-    axes=None,
-    logo_scale=20,
-    fig_width_per_kmer=4,
-    fig_height=3,
-):
+    df: pd.DataFrame,
+    allele_col: str,
+    allele: str,
+    kmers: Sequence[int],
+    axes: Axes | Sequence[Axes] | None = None,
+    logo_scale: int = 20,
+    fig_width_per_kmer: int = 4,
+    fig_height: int = 3,
+) -> list[lm.Logo]:
+    """Plot sequence logos for multiple peptide lengths.
+
+    Args:
+        df (pandas.DataFrame): DataFrame containing a ``sequence`` column.
+        allele_col (str): Name of the column with allele identifiers.
+        allele (str): Allele value to filter ``df``.
+        kmers (Sequence[int]): Peptide lengths to plot.
+        axes (matplotlib.axes.Axes or Sequence[Axes], optional): Axes to draw
+            the logos on. When ``None`` a new figure is created.
+        logo_scale (int, optional): Scaling factor for the information
+            content. Defaults to ``20``.
+        fig_width_per_kmer (int, optional): Width of each subplot.
+            Defaults to ``4``.
+        fig_height (int, optional): Height of the figure. Defaults to ``3``.
+
+    Returns:
+        list[logomaker.Logo]: List of logo objects for the plotted motifs.
+    """
     df["nAA"] = df.sequence.str.len()
     df = df.drop_duplicates(
         [allele_col, "sequence"]
@@ -404,7 +500,30 @@ def plot_motif_multi_mer(
     return logo_plots
 
 
-def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
+def plot_motif(
+    df: pd.DataFrame,
+    allele_col: str,
+    allele: str,
+    kmer: int,
+    ax: Axes | None = None,
+    logo_scale: int = 20,
+) -> lm.Logo:
+    """Plot a single sequence logo for peptides of a given length.
+
+    Args:
+        df (pandas.DataFrame): DataFrame of peptides.
+        allele_col (str): Column containing allele identifiers.
+        allele (str): Allele to plot.
+        kmer (int): Peptide length to include in the motif.
+        ax (matplotlib.axes.Axes, optional): Axis to draw on. When ``None`` a
+            new axis is created.
+        logo_scale (int, optional): Scaling factor for information content.
+            Defaults to ``20``.
+
+    Returns:
+        logomaker.Logo: The created Logo object.
+    """
+
     motif_df = count_motif_bits(df, allele_col, allele, kmer, logo_scale=logo_scale)
     logo_plot = lm.Logo(
         motif_df,
@@ -416,9 +535,28 @@ def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
     return logo_plot
 
 
-def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
+def count_motif_bits(
+    df: pd.DataFrame,
+    allele_col: str,
+    allele: str,
+    kmer: int,
+    logo_scale: int = 20,
+) -> pd.DataFrame:
+    """Calculate the information content matrix for a motif.
+
+    Args:
+        df (pandas.DataFrame): DataFrame of peptides.
+        allele_col (str): Column with allele identifiers.
+        allele (str): Allele value to select.
+        kmer (int): Peptide length to include.
+        logo_scale (int, optional): Scaling factor used when converting
+            frequencies to bits. Defaults to ``20``.
+
+    Returns:
+        pandas.DataFrame: Matrix suitable for :class:`logomaker.Logo`.
+    """
+
     df = df[(df[allele_col] == allele) & (df.nAA == kmer)]
-    # print(f"allele={allele}, kmer={kmer}, n={len(df)}")
     data = np.zeros((kmer, 26), dtype=float)
     for seq in df.sequence.values:
         data[(np.arange(kmer), np.array(seq, "c").view(np.int8) - ord("A"))] += 1
@@ -427,30 +565,55 @@ def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
 
     df = df[list("ACDEFGHIKLMNPQRSTVWY")]
     df = df.apply(lambda p: p * np.log2(p * logo_scale + 1e-100))
-    # df.values[df.isin([np.nan, np.inf, -np.inf])] = np.min(
-    #     np.ma.masked_invalid(df.sum(axis=1))
-    # )
     df.values[df.isin([np.nan, np.inf, -np.inf])] = 0
     return df
 
 
-def adjust_axes(logo_plots, max_y):
+def adjust_axes(
+    logo_plots: Sequence[lm.Logo] | Sequence[list[lm.Logo]],
+    max_y: float,
+) -> None:
+    """Synchronise the y-axis limits across logo plots.
+
+    Args:
+        logo_plots (Sequence[logomaker.Logo] | Sequence[list[logomaker.Logo]]):
+            Logos returned by :func:`plot_motif` or :func:`plot_motif_multi_mer`.
+        max_y (float): Maximum y value to set for all axes.
+
+    Returns:
+        None
+    """
+
     for logos in logo_plots:
         if isinstance(logos, list):
             logos[0].ax.set_ylim(top=max_y)
-            # for logo in logos:
-            #     if max_y < logo.ax.get_ylim()[1]:
-            #         max_y = logo.ax.get_ylim()[1]
-            #     else:
-            #         logo.ax.set_ylim(top=np.ceil(max_y*5+1)*0.2)
         else:
             logos.ax.set_ylim(top=max_y)
             break
 
 
-def select_optimal_a_cover(a_to_b_map, uncovered_b, coverage_threshold, max_a_elements):
+def select_optimal_a_cover(
+    a_to_b_map: dict[str, set[str]],
+    uncovered_b: set[str],
+    coverage_threshold: float,
+    max_a_elements: int,
+) -> set[str]:
+    """Greedily select elements of ``a`` to cover ``b`` as well as possible.
+
+    Args:
+        a_to_b_map (dict[str, set[str]]): Mapping from an ``a`` element to the
+            ``b`` elements it covers.
+        uncovered_b (set[str]): Set of ``b`` elements that need to be covered.
+        coverage_threshold (float): Fraction of ``b`` that should be covered
+            before stopping.
+        max_a_elements (int): Maximum number of ``a`` elements to select.
+
+    Returns:
+        set[str]: The selected ``a`` elements.
+    """
+
     total_b = len(uncovered_b)
-    selected_a = set()
+    selected_a: set[str] = set()
     current_coverage = 0.0
     selected_count = 0
 
