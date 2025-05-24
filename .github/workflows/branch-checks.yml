@@ -29,3 +29,18 @@ jobs:
       os: ${{ matrix.os }}
       install-script: ./pip_install.sh stable,tests mhc ${{ matrix.python-version }}
       test-script: ./run_unit_tests.sh mhc false
+
+  run-cli-tests-stable:
+    name: Test cli 'stable' on ubuntu-latest
+    needs: pre-commit
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11"]
+    uses: ./.github/workflows/_run_tests.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      os: ${{ matrix.os }}
+      install-script: ./pip_install.sh stable,tests mhc ${{ matrix.python-version }}
+      test-script: ./run_cli_tests.sh mhc
