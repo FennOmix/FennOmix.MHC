@@ -2,7 +2,7 @@
 
 Foundation model for MHC class I peptide binding prediction built on deep contrastive learning.
 
-See the [online documentation](https://alphabase.readthedocs.io/en/latest) for
+See the [online documentation](https://fennet.mhc.readthedocs.io/en/latest) for
 full API details and tutorials.
 
 ## Installation
@@ -74,4 +74,3 @@ predict_epitopes_for_mhc(
     "./output",
 )
 ```
-
