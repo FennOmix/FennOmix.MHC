@@ -38,7 +38,22 @@ from fennet_mhc.mhc_utils import NonSpecificDigest
 
 
 class PretrainedModels:
+    """Container for pretrained models used in the pipeline.
+
+    This class lazily downloads the required model weights and provides
+    convenience methods to embed proteins and peptides as well as to predict
+    peptide--MHC interactions.
+    """
+
     def __init__(self, device: str = "cuda"):
+        """Initialize the pretrained models and load model weights.
+
+        Parameters
+        ----------
+        device : str, optional
+            Device used for inference (``"cuda"``, ``"cpu"`` or ``"mps"``),
+            by default ``"cuda"``.
+        """
         self.device = _set_device(device)
         _download_pretrained_models()
         self.hla_encoder = self._load_hla_model()
@@ -58,6 +73,19 @@ class PretrainedModels:
         self.hla_df.reset_index(drop=True, inplace=True)
 
     def embed_proteins(self, fasta: str):
+        """Embed HLA protein sequences from a FASTA file.
+
+        Parameters
+        ----------
+        fasta : str
+            Path to a FASTA file containing HLA sequences.
+
+        Returns
+        -------
+        tuple[pd.DataFrame, np.ndarray]
+            A tuple of the loaded protein dataframe and the corresponding
+            embeddings.
+        """
         if not os.path.exists(fasta):
             raise FileNotFoundError(f"Fasta file not found: {fasta}")
         logging.info(f"Loading MHC protein sequences from `{fasta}` ...\n")
@@ -107,6 +135,22 @@ class PretrainedModels:
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
     ):
+        """Digest proteins in a FASTA file and embed the resulting peptides.
+
+        Parameters
+        ----------
+        fasta : str
+            Path to a FASTA file containing proteins.
+        min_peptide_length : int, optional
+            Minimum peptide length to generate, by default ``8``.
+        max_peptide_length : int, optional
+            Maximum peptide length to generate, by default ``12``.
+
+        Returns
+        -------
+        tuple[list[str], np.ndarray]
+            A list of peptide sequences and their embeddings.
+        """
         logging.info(f"Loading peptide sequences from `{fasta}` ...\n")
         digest = NonSpecificDigest(fasta, min_peptide_length, max_peptide_length)
         total_peptides_num = len(digest.digest_starts)
@@ -154,6 +198,22 @@ class PretrainedModels:
         min_peptide_length: int = 8,
         max_peptide_length: int = 12,
     ):
+        """Embed peptides listed in a TSV/CSV file.
+
+        Parameters
+        ----------
+        peptide_tsv : str
+            Path to a delimited file containing a ``sequence`` column.
+        min_peptide_length : int, optional
+            Minimum allowed peptide length, by default ``8``.
+        max_peptide_length : int, optional
+            Maximum allowed peptide length, by default ``12``.
+
+        Returns
+        -------
+        tuple[list[str], np.ndarray]
+            A list of peptide sequences and their embeddings.
+        """
         logging.info(f"Loading peptide sequences from `{peptide_tsv}` ...\n")
         delimiter = _get_delimiter(peptide_tsv)
         input_peptide_df = pd.read_table(peptide_tsv, sep=delimiter, index_col=False)
@@ -214,6 +274,31 @@ class PretrainedModels:
         max_peptide_length: int = 12,
         outlier_distance: float = 0.4,
     ):
+        """Find the best binding epitope for each HLA allele.
+
+        Parameters
+        ----------
+        peptide_list : list
+            List of peptide sequences.
+        peptide_embeddings : np.ndarray
+            Embeddings corresponding to ``peptide_list``.
+        hla_df : pandas.DataFrame, optional
+            DataFrame containing HLA information. If ``None`` the builtin
+            embeddings are used.
+        hla_embeddings : np.ndarray, optional
+            Embeddings for the HLAs in ``hla_df``.
+        min_peptide_length : int, optional
+            Minimum peptide length considered, by default ``8``.
+        max_peptide_length : int, optional
+            Maximum peptide length considered, by default ``12``.
+        outlier_distance : float, optional
+            Distance threshold used to filter outliers, by default ``0.4``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe mapping each allele to its closest peptide.
+        """
         logging.info("Predicting MHC binders for epitopes ...\n")
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
         valid_indices = np.where(
@@ -280,6 +365,33 @@ class PretrainedModels:
         max_peptide_length: int = 12,
         outlier_distance: float = 0.4,
     ):
+        """Predict the most likely allele binder for each peptide.
+
+        Parameters
+        ----------
+        peptide_list : list
+            Peptide sequences to evaluate.
+        peptide_embeddings : np.ndarray
+            Embeddings for ``peptide_list``.
+        alleles : list
+            List of allele names to consider.
+        hla_df : pandas.DataFrame, optional
+            DataFrame containing HLA sequence information. If ``None`` the
+            pretrained HLA database is used.
+        hla_embeddings : np.ndarray, optional
+            Embeddings for the HLAs in ``hla_df``.
+        min_peptide_length : int, optional
+            Minimum peptide length considered, by default ``8``.
+        max_peptide_length : int, optional
+            Maximum peptide length considered, by default ``12``.
+        outlier_distance : float, optional
+            Distance threshold used to filter outliers, by default ``0.4``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Table of peptides with their best matching allele and distance.
+        """
         logging.info("Predicting peptide binders for MHC molecules...\n")
         peptide_lengths = np.array([len(pep) for pep in peptide_list])
         valid_indices = np.where(
@@ -343,6 +455,25 @@ class PretrainedModels:
         n_centroids: int = 8,
         outlier_distance: float = 0.2,
     ):
+        """Cluster peptides based on their embeddings using k-means.
+
+        Parameters
+        ----------
+        peptide_list : list
+            List of peptide sequences.
+        pept_embeddings : np.ndarray
+            Embedding matrix corresponding to ``peptide_list``.
+        n_centroids : int, optional
+            Number of clusters to form, by default ``8``.
+        outlier_distance : float, optional
+            Distance threshold for optional centroid refinement, by default ``0.2``.
+
+        Returns
+        -------
+        tuple[pandas.DataFrame, np.ndarray]
+            DataFrame assigning each peptide to a cluster and the cluster
+            centroid embeddings.
+        """
         d = pept_embeddings.shape[1]
         kmeans = faiss.Kmeans(d, n_centroids)
         kmeans.niter = 20
@@ -404,6 +535,7 @@ class PretrainedModels:
         return cluster_df, centroids
 
     def _load_hla_model(self):
+        """Load the pretrained HLA encoder model."""
         hla_encoder = ModelHlaEncoder()
         hla_encoder.to(self.device)
         hla_encoder.load_state_dict(
@@ -412,6 +544,7 @@ class PretrainedModels:
         return hla_encoder
 
     def _load_peptide_model(self):
+        """Load the pretrained peptide encoder model."""
         pept_encoder = ModelSeqEncoder()
         pept_encoder.to(self.device)
         pept_encoder.load_state_dict(
@@ -421,6 +554,22 @@ class PretrainedModels:
 
 
 def embed_proteins(fasta: str, out_folder: str, device: str = "cuda"):
+    """Embed HLA protein sequences and save the embeddings to disk.
+
+    Parameters
+    ----------
+    fasta : str
+        Path to a FASTA file containing HLA protein sequences.
+    out_folder : str
+        Directory where the resulting ``hla_embeddings.pkl`` is stored.
+    device : str, optional
+        Device used for embedding (``"cuda"``, ``"cpu"`` or ``"mps"``), by
+        default ``"cuda"``.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(out_folder, exist_ok=True)
     set_logger(
         log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
@@ -449,6 +598,27 @@ def embed_peptides_from_file(
     max_peptide_length: int = 12,
     device: str = "cuda",
 ):
+    """Embed peptides provided in a FASTA or tabular file and save them.
+
+    Parameters
+    ----------
+    peptide_file_path : str
+        Input file containing peptide sequences. Supported formats are FASTA and
+        TSV/CSV files with a ``sequence`` column.
+    out_folder : str
+        Directory where the resulting ``peptide_embeddings.pkl`` is stored.
+    min_peptide_length : int, optional
+        Minimum length of peptides to keep, by default ``8``.
+    max_peptide_length : int, optional
+        Maximum length of peptides to keep, by default ``12``.
+    device : str, optional
+        Device used for embedding (``"cuda"``, ``"cpu"`` or ``"mps"``), by
+        default ``"cuda"``.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(out_folder, exist_ok=True)
     set_logger(
         log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
@@ -493,6 +663,35 @@ def predict_epitopes_for_mhc(
     hla_file_path: str = None,
     device: str = "cuda",
 ):
+    """Predict peptide binders for the given MHC alleles.
+
+    Parameters
+    ----------
+    peptide_file_path : str
+        Path to peptide embeddings or sequence file.
+    alleles : list
+        Alleles to consider during prediction.
+    out_folder : str
+        Directory where results are written.
+    out_fasta_format : bool, optional
+        Whether to output a FASTA file of peptides instead of TSV, by default
+        ``False``.
+    min_peptide_length : int, optional
+        Minimum peptide length, by default ``8``.
+    max_peptide_length : int, optional
+        Maximum peptide length, by default ``12``.
+    outlier_distance : float, optional
+        Distance threshold used to filter predictions, by default ``0.4``.
+    hla_file_path : str, optional
+        Optional path to custom HLA embeddings or FASTA file.
+    device : str, optional
+        Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
+        by default ``"cuda"``.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(out_folder, exist_ok=True)
     set_logger(
         log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
@@ -547,6 +746,30 @@ def predict_mhc_binders_for_epitopes(
     hla_file_path: str = None,
     device: str = "cuda",
 ):
+    """Find MHC binders for the given peptides (epitopes).
+
+    Parameters
+    ----------
+    peptide_file_path : str
+        Path to peptide embeddings or sequence file.
+    out_folder : str
+        Directory where the resulting predictions are saved.
+    min_peptide_length : int, optional
+        Minimum peptide length considered, by default ``8``.
+    max_peptide_length : int, optional
+        Maximum peptide length considered, by default ``12``.
+    outlier_distance : float, optional
+        Distance threshold used to filter predictions, by default ``0.4``.
+    hla_file_path : str, optional
+        Optional path to custom HLA embeddings or FASTA file.
+    device : str, optional
+        Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
+        by default ``"cuda"``.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(out_folder, exist_ok=True)
     set_logger(
         log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
@@ -592,6 +815,32 @@ def deconvolute_peptides(
     hla_file_path: str = None,
     device: str = "cuda",
 ):
+    """Cluster peptides and assign a representative allele to each cluster.
+
+    Parameters
+    ----------
+    peptide_file_path : str
+        Path to peptide embeddings or sequence file used for clustering.
+    n_centroids : int
+        Number of clusters to form.
+    out_folder : str
+        Directory where clustering results are saved.
+    min_peptide_length : int, optional
+        Minimum peptide length, by default ``8``.
+    max_peptide_length : int, optional
+        Maximum peptide length, by default ``12``.
+    outlier_distance : float, optional
+        Distance threshold for refining clusters, by default ``100`` (disabled).
+    hla_file_path : str, optional
+        Optional path to custom HLA embeddings or FASTA file.
+    device : str, optional
+        Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
+        by default ``"cuda"``.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(out_folder, exist_ok=True)
     set_logger(
         log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
@@ -651,6 +900,41 @@ def deconvolute_and_predict_peptides(
     hla_file_path: str | Path = None,
     device: str = "cuda",
 ):
+    """Cluster peptides, deduce "pseudo" alleles, and predict binders for
+    another peptide set.
+
+    The first peptide file is used to derive clusters representing allele
+    specificities. The second file is queried against these clusters to
+    identify candidate binders.
+
+    Parameters
+    ----------
+    peptide_file_path_to_deconv : str | Path
+        File containing peptides used for deconvolution (clustering).
+    peptide_file_path_to_predict : str | Path
+        File containing peptides for which binders should be predicted.
+    n_centroids : int
+        Number of clusters to form during deconvolution.
+    out_folder : str | Path
+        Directory where the results are stored.
+    out_fasta_format : bool
+        If ``True`` write results to FASTA instead of TSV.
+    min_peptide_length : int, optional
+        Minimum peptide length considered, by default ``8``.
+    max_peptide_length : int, optional
+        Maximum peptide length considered, by default ``12``.
+    outlier_distance : float, optional
+        Distance threshold used during clustering and prediction, by default ``0.2``.
+    hla_file_path : str | Path, optional
+        Optional path to custom HLA embeddings or FASTA file.
+    device : str, optional
+        Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
+        by default ``"cuda"``.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(out_folder, exist_ok=True)
     set_logger(
         log_file_name=os.path.join(out_folder, global_settings["log_file_name"]),
@@ -732,6 +1016,30 @@ def _deconvolute_without_save(
     n_centroids: int,
     outlier_distance,
 ):
+    """Helper that performs deconvolution and allele assignment without saving.
+
+    Parameters
+    ----------
+    pretrained_models : PretrainedModels
+        Instance containing the models used for clustering.
+    peptide_list : list
+        List of peptides to cluster.
+    pept_embeds : np.ndarray
+        Embeddings for ``peptide_list``.
+    hla_embeds : np.ndarray
+        Embeddings of HLA proteins.
+    hla_df : pandas.DataFrame
+        DataFrame with HLA allele information corresponding to ``hla_embeds``.
+    n_centroids : int
+        Number of clusters to form.
+    outlier_distance : float
+        Distance threshold for refining clusters.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, np.ndarray]
+        Cluster assignment dataframe and centroid embeddings.
+    """
     logging.info("Calling `pretrained_models.deconvolute_peptides()` ...\n")
     cluster_df, centroids = pretrained_models.deconvolute_peptides(
         peptide_list,
@@ -835,6 +1143,22 @@ def _download_pretrained_models(
 
 
 def _load_protein_embeddings(pretrained_models: PretrainedModels, hla_file_path):
+    """Load or generate embeddings for HLA proteins.
+
+    Parameters
+    ----------
+    pretrained_models : PretrainedModels
+        Instance providing embedding functionality.
+    hla_file_path : str
+        Path to a pickle file with precomputed embeddings or a FASTA file with
+        sequences. If ``None`` the pretrained embeddings bundled with the
+        package are used.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, np.ndarray]
+        The protein dataframe and corresponding embeddings.
+    """
     if hla_file_path is None:
         return pretrained_models.hla_df, pretrained_models.hla_embeddings
     if hla_file_path.lower().endswith(".pkl"):
@@ -853,6 +1177,24 @@ def _load_protein_embeddings(pretrained_models: PretrainedModels, hla_file_path)
 def _load_peptide_embeddings(
     pretrained_models, peptide_file_path, min_peptide_length, max_peptide_length
 ):
+    """Load or compute embeddings for a peptide file.
+
+    Parameters
+    ----------
+    pretrained_models : PretrainedModels
+        Instance providing embedding functionality.
+    peptide_file_path : str
+        File containing peptide sequences or a pickle file with embeddings.
+    min_peptide_length : int
+        Minimum peptide length when generating embeddings from sequences.
+    max_peptide_length : int
+        Maximum peptide length when generating embeddings from sequences.
+
+    Returns
+    -------
+    tuple[list[str], np.ndarray]
+        List of peptide sequences and their embeddings.
+    """
     if not os.path.exists(peptide_file_path):
         raise FileNotFoundError(f"Peptide file not found: {peptide_file_path}")
     if peptide_file_path.lower().endswith(".pkl"):
@@ -877,6 +1219,19 @@ def _load_peptide_embeddings(
 
 
 def _load_hla_embedding_pkl(fname=None):
+    """Load HLA protein embeddings from a pickle file.
+
+    Parameters
+    ----------
+    fname : str, optional
+        Path to the ``.pkl`` file. If ``None``, the bundled embeddings are
+        loaded.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, np.ndarray]
+        The protein dataframe and corresponding embeddings.
+    """
     if fname is None:
         fname = HLA_EMBEDDING_PATH
     if not os.path.exists(fname):
@@ -887,6 +1242,18 @@ def _load_hla_embedding_pkl(fname=None):
 
 
 def load_peptide_embedding_pkl(fname):
+    """Load peptide embeddings from a pickle file.
+
+    Parameters
+    ----------
+    fname : str
+        Path to the pickle file.
+
+    Returns
+    -------
+    tuple[list[str], np.ndarray]
+        The peptide list and corresponding embeddings.
+    """
     with open(fname, "rb") as f:
         _dict = pickle.load(f)
         return _dict["peptide_list"], _dict["pept_embeds"]
