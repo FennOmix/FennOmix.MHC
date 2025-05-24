@@ -95,7 +95,9 @@ def get_ascii_indices(seq_array: list[str]) -> torch.LongTensor:
 class ModelSeqEncoder(torch.nn.Module):
     """Encoder module for peptide sequences."""
 
-    def __init__(self, d_model: int = 480, layer_num: int = 4, dropout: float = 0.2) -> None:
+    def __init__(
+        self, d_model: int = 480, layer_num: int = 4, dropout: float = 0.2
+    ) -> None:
         """Initialize the sequence encoder.
 
         Args:
@@ -133,7 +135,9 @@ class ModelSeqEncoder(torch.nn.Module):
 class ModelHlaEncoder(torch.nn.Module):
     """Encoder for HLA embeddings."""
 
-    def __init__(self, d_model: int = 480, layer_num: int = 1, dropout: float = 0.2) -> None:
+    def __init__(
+        self, d_model: int = 480, layer_num: int = 1, dropout: float = 0.2
+    ) -> None:
         """Initialize the HLA encoder.
 
         Args:
@@ -261,7 +265,9 @@ def batchify_hla_esm_list(batch_esm_list: list[np.ndarray]) -> torch.Tensor:
     return torch.tensor(hla_x, dtype=torch.float32)
 
 
-def pept_hla_collate(batch: list[tuple[np.ndarray, str, str]]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def pept_hla_collate(
+    batch: list[tuple[np.ndarray, str, str]],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Collate function for ``HlaDataSet``."""
 
     hla_embeds = [x[0] for x in batch]
@@ -280,7 +286,9 @@ def pept_hla_collate(batch: list[tuple[np.ndarray, str, str]]) -> tuple[torch.Te
     )
 
 
-def get_hla_dataloader(dataset: HlaDataSet, batch_size: int, shuffle: bool) -> DataLoader:
+def get_hla_dataloader(
+    dataset: HlaDataSet, batch_size: int, shuffle: bool
+) -> DataLoader:
     """Create a DataLoader for :class:`HlaDataSet`."""
 
     return DataLoader(
@@ -294,7 +302,9 @@ def get_hla_dataloader(dataset: HlaDataSet, batch_size: int, shuffle: bool) -> D
 class SiameseCELoss:
     margin: float = 1
 
-    def get_loss(self, hla_x: torch.Tensor, x: torch.Tensor, y: float = 1.0) -> torch.Tensor:
+    def get_loss(
+        self, hla_x: torch.Tensor, x: torch.Tensor, y: float = 1.0
+    ) -> torch.Tensor:
         """Compute contrastive loss for a pair of embeddings."""
 
         diff = hla_x - x
@@ -306,7 +316,9 @@ class SiameseCELoss:
         loss = torch.mean(loss) / 2.0
         return loss
 
-    def __call__(self, hla_x: torch.Tensor, pos_x: torch.Tensor, neg_x: torch.Tensor) -> torch.Tensor:
+    def __call__(
+        self, hla_x: torch.Tensor, pos_x: torch.Tensor, neg_x: torch.Tensor
+    ) -> torch.Tensor:
         """Compute the Siamese loss for positive and negative pairs."""
 
         loss0 = self.get_loss(hla_x, pos_x, 1)
