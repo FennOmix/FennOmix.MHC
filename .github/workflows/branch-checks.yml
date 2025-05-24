@@ -14,10 +14,24 @@ jobs:
     - uses: actions/setup-python@v5
     - uses: pre-commit/action@v3.0.1
 
+  install-env-stable:
+    name: Install "stable" on ubuntu-latest
+    needs: pre-commit
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11"]
+    uses: ./.github/workflows/_install_env.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      os: ${{ matrix.os }}
+      install-script: ./pip_install.sh stable,tests mhc ${{ matrix.python-version }}
+
   # For feature branches, we don't test the full matrix (os x [stable, loose]) in order to save time & resources.
   run-tests-stable:
     name: Test 'stable' on ubuntu-latest
-    needs: pre-commit
+    needs: install-env-stable
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +41,6 @@ jobs:
     with:
       python-version: ${{ matrix.python-version }}
       os: ${{ matrix.os }}
-      install-script: ./pip_install.sh stable,tests mhc ${{ matrix.python-version }}
       test-script: ./run_unit_tests.sh mhc false
 
   run-cli-tests-stable:
@@ -42,5 +55,4 @@ jobs:
     with:
       python-version: ${{ matrix.python-version }}
       os: ${{ matrix.os }}
-      install-script: ./pip_install.sh stable,tests mhc ${{ matrix.python-version }}
       test-script: ./run_cli_tests.sh mhc
