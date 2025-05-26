@@ -1,5 +1,10 @@
 # Fennet-MHC
 
+[![branch-checks](https://github.com/FennOmix/FeNNet.MHC/actions/workflows/branch-checks.yml/badge.svg)](https://github.com/FennOmix/FeNNet.MHC/actions/workflows/branch-checks.yml)
+[![PyPI](https://img.shields.io/pypi/v/fennet-mhc.svg)](https://pypi.org/project/fennet-mhc/)
+[![Python](https://img.shields.io/pypi/pyversions/fennet-mhc.svg)](https://pypi.org/project/fennet-mhc/)
+[![License](https://img.shields.io/github/license/FennOmix/FeNNet.MHC.svg)](./LICENSE)
+
 Foundation model for MHC class I peptide binding prediction built on deep contrastive learning.
 
 See the [online documentation](https://fennet.mhc.readthedocs.io/en/latest) for
