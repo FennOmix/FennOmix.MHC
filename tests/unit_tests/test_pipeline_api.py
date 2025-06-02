@@ -6,12 +6,14 @@ import pytest
 
 from fennet_mhc.constants._const import (
     MHC_DF_FOR_EPITOPES_TSV,
+    PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV,
     PEPTIDE_DF_FOR_MHC_TSV,
     PEPTIDES_FOR_MHC_FASTA,
 )
 from fennet_mhc.pipeline_api import (
     PretrainedModels,
     _load_peptide_embeddings,
+    deconvolute_peptides,
     predict_epitopes_for_mhc,
     predict_mhc_binders_for_epitopes,
 )
@@ -108,19 +110,19 @@ def test_predict_binders_for_epitopes():
     assert os.path.getsize(f"{OUT_DIR}/{MHC_DF_FOR_EPITOPES_TSV}") > 0
 
 
-# def test_peptide_deconvolution():
-#     deconvolute_peptides(
-#         TEST_PEPTIDE_TSV,
-#         2,
-#         OUT_DIR,
-#         min_peptide_length=8,
-#         max_peptide_length=12,
-#         outlier_distance=100,
-#         hla_file_path=None,
-#         device="cuda",
-#     )
-#     assert os.path.exists(f"{OUT_DIR}/{PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV}")
-#     assert os.path.getsize(f"{OUT_DIR}/{PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV}") > 0
+def test_peptide_deconvolution():
+    deconvolute_peptides(
+        TEST_PEPTIDE_TSV,
+        2,
+        OUT_DIR,
+        min_peptide_length=8,
+        max_peptide_length=12,
+        outlier_distance=100,
+        hla_file_path=None,
+        device="cuda",
+    )
+    assert os.path.exists(f"{OUT_DIR}/{PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV}")
+    assert os.path.getsize(f"{OUT_DIR}/{PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV}") > 0
 
 
 class DummyModels:

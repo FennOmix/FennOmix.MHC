@@ -66,7 +66,7 @@ where = ["."]
 include = ["fennet*"]
 
 [tool.setuptools.dynamic]
-# https://stackoverflow.com/a/73600610
+# https://stackoverflow.com/a/73600610[from alphaX]
 dependencies = {file = ["requirements/requirements_loose.txt"]}
 optional-dependencies.stable = { file = ["requirements/_requirements.freeze.txt"] }
 optional-dependencies.tests = { file = ["requirements/requirements_tests.txt"] }
