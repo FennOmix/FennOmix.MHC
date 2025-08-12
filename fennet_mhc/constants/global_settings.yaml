@@ -1,10 +1,15 @@
 # CONST CONFIG
 FENNETMHC_HOME: "~/fennet-mhc"
 peptide_model: "pept_model_v20240819.pt"
-hla_model: "hla_model_v20240819.pt"
-hla_embedding: "hla_embeds_v20240819.pkl"
+mhc_model: "mhc_model_v20240819.pt"
+mhc_embedding: "mhc_embeds_v20240819.pkl"
+
+peptide_model_pseudo: "pept_model_pseudo_v20250730.pt"
+mhc_model_pseudo: "mhc_model_pseudo_v20250730.pt"
+mhc_embedding_pseudo: "mhc_embeds_pseudo_v20250730.pkl"
+
 background_fasta: "background.fasta"
-hla_url: "https://fennomix.lab.westlake.edu.cn/resource/mhc/model/"
+download_url: "https://fennomix.lab.westlake.edu.cn/resource/mhc/model/"
 
 log_file_name: "fennet_mhc.log"
 log_level: "info"

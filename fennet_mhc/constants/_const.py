@@ -10,11 +10,29 @@ FENNETMHC_HOME = os.path.expanduser(global_settings["FENNETMHC_HOME"])
 
 FENNETMHC_MODEL_DIR = os.path.join(FENNETMHC_HOME, "foundation_model")
 
-HLA_MODEL_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings["hla_model"])
+MHC_MODEL_KEY = "mhc_model"
+PEPTIDE_MODEL_KEY = "peptide_model"
+MHC_EMBEDDING_KEY = "mhc_embedding"
+MHC_MODEL_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings[MHC_MODEL_KEY])
+PEPTIDE_MODEL_PATH = os.path.join(
+    FENNETMHC_MODEL_DIR, global_settings[PEPTIDE_MODEL_KEY]
+)
+MHC_EMBEDDING_PATH = os.path.join(
+    FENNETMHC_MODEL_DIR, global_settings[MHC_EMBEDDING_KEY]
+)
 
-PEPTIDE_MODEL_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings["peptide_model"])
-
-HLA_EMBEDDING_PATH = os.path.join(FENNETMHC_MODEL_DIR, global_settings["hla_embedding"])
+MHC_MODEL_PSEUDO_KEY = "mhc_model_pseudo"
+PEPTIDE_MODEL_PSEUDO_KEY = "peptide_model_pseudo"
+MHC_EMBEDDING_PSEUDO_KEY = "mhc_embedding_pseudo"
+MHC_MODEL_PSEUDO_PATH = os.path.join(
+    FENNETMHC_MODEL_DIR, global_settings[MHC_MODEL_PSEUDO_KEY]
+)
+PEPTIDE_MODEL_PSEUDO_PATH = os.path.join(
+    FENNETMHC_MODEL_DIR, global_settings[PEPTIDE_MODEL_PSEUDO_KEY]
+)
+MHC_EMBEDDING_PSEUDO_PATH = os.path.join(
+    FENNETMHC_MODEL_DIR, global_settings[MHC_EMBEDDING_PSEUDO_KEY]
+)
 
 BACKGROUND_FASTA_PATH = os.path.join(
     FENNETMHC_MODEL_DIR, global_settings["background_fasta"]
