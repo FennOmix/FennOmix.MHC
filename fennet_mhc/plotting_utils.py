@@ -1,3 +1,5 @@
+"""Plotting utilities for visualizing embeddings and sequence motifs."""
+
 import logomaker as lm
 import matplotlib.pyplot as plt
 import numpy as np
@@ -267,12 +269,42 @@ Turbo256 = (
 
 
 def fit_hla_umap_reducer(hla_embeds, random_state=1337):
+    """Fit a UMAP reducer on HLA embedding vectors.
+
+    Parameters
+    ----------
+    hla_embeds : array-like
+        Matrix of HLA embeddings with shape (n_alleles, d).
+    random_state : int
+        Seed for UMAP reproducibility.
+
+    Returns
+    -------
+    umap.UMAP
+        A fitted UMAP reducer.
+    """
     hla_reducer = umap.UMAP(random_state=random_state)
     hla_reducer.fit(hla_embeds)
     return hla_reducer
 
 
 def transform_embeds_to_umap_df(hla_reducer, embeds, alleles):
+    """Transform embeddings with a UMAP reducer into a DataFrame.
+
+    Parameters
+    ----------
+    hla_reducer : umap.UMAP
+        Fitted UMAP reducer.
+    embeds : array-like
+        Embedding matrix to transform.
+    alleles : list[str]
+        Labels for each embedding row.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns "UMAP1", "UMAP2", and "allele".
+    """
     embedding = hla_reducer.transform(embeds)
     df = pd.DataFrame(embedding, columns=("UMAP1", "UMAP2"))
     df["allele"] = alleles
@@ -280,6 +312,22 @@ def transform_embeds_to_umap_df(hla_reducer, embeds, alleles):
 
 
 def transform_matrix_to_mds_df(matrix, labels, seed):
+    """Apply MDS to a precomputed distance matrix and return a DataFrame.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Precomputed distance matrix.
+    labels : list[str]
+        Labels for each point.
+    seed : int
+        Random seed for MDS.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns "MDS1", "MDS2", and "label".
+    """
     mds = MDS(
         n_components=2,
         random_state=seed,
@@ -293,6 +341,22 @@ def transform_matrix_to_mds_df(matrix, labels, seed):
 
 
 def transform_embeds_to_tSNE_df(embeds, labels, seed):
+    """Run t-SNE on embeddings and return a labeled DataFrame.
+
+    Parameters
+    ----------
+    embeds : array-like
+        Embedding matrix with shape (n, d).
+    labels : list[str]
+        Labels for each embedding row.
+    seed : int
+        Random seed for t-SNE.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns "t-SNE 1", "t-SNE 2", and "label".
+    """
     tsne = TSNE(
         n_components=2, random_state=seed, perplexity=30, learning_rate=200, n_iter=1000
     )
@@ -312,6 +376,30 @@ def plot_umap_df(
     image_height=600,
     save_as="",
 ):
+    """Plot a 2D UMAP embedding with Plotly.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame produced by ``transform_embeds_to_umap_df``.
+    color_col : str
+        Column used to color points.
+    hover_col : str
+        Column displayed in hover tooltip.
+    size : int
+        Marker size.
+    jump_color : bool
+        If True, cycle through a diverse color palette; otherwise map evenly.
+    image_width, image_height : int
+        Figure dimensions in pixels.
+    save_as : str
+        Optional path to save the figure as a static image.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+        The plotly figure object.
+    """
     factors = df[color_col].drop_duplicates().to_list()
     color_mapping = {}
     for i, factor in enumerate(factors):
@@ -369,6 +457,30 @@ def plot_motif_multi_mer(
     fig_width_per_kmer=4,
     fig_height=3,
 ):
+    """Plot sequence logos for multiple peptide lengths.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame with a "sequence" column and the grouping column ``allele_col``.
+    allele_col : str
+        Column indicating allele identity.
+    allele : str
+        Allele to plot.
+    kmers : list[int]
+        Peptide lengths to plot.
+    axes : matplotlib Axes or array-like, optional
+        Axes to draw on; created if not provided.
+    logo_scale : float
+        Scaling factor for information content.
+    fig_width_per_kmer, fig_height : float
+        Figure sizing parameters.
+
+    Returns
+    -------
+    list
+        List of Logo objects.
+    """
     df["nAA"] = df.sequence.str.len()
     df = df.drop_duplicates(
         [allele_col, "sequence"]
@@ -405,6 +517,10 @@ def plot_motif_multi_mer(
 
 
 def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
+    """Plot a sequence logo for a single peptide length.
+
+    Returns the Logo object created by logomaker.
+    """
     motif_df = count_motif_bits(df, allele_col, allele, kmer, logo_scale=logo_scale)
     logo_plot = lm.Logo(
         motif_df,
@@ -417,6 +533,10 @@ def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
 
 
 def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
+    """Compute per-position information content for the motif.
+
+    The output is formatted for consumption by logomaker.Logo.
+    """
     df = df[(df[allele_col] == allele) & (df.nAA == kmer)]
     # print(f"allele={allele}, kmer={kmer}, n={len(df)}")
     data = np.zeros((kmer, 26), dtype=float)
@@ -435,6 +555,7 @@ def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
 
 
 def adjust_axes(logo_plots, max_y):
+    """Unify y-axis limits across one or more Logo plots."""
     for logos in logo_plots:
         if isinstance(logos, list):
             logos[0].ax.set_ylim(top=max_y)
@@ -449,6 +570,11 @@ def adjust_axes(logo_plots, max_y):
 
 
 def select_optimal_a_cover(a_to_b_map, uncovered_b, coverage_threshold, max_a_elements):
+    """Greedy set cover selection.
+
+    Select up to ``max_a_elements`` keys from ``a_to_b_map`` to cover elements in
+    ``uncovered_b`` until ``coverage_threshold`` is reached.
+    """
     total_b = len(uncovered_b)
     selected_a = set()
     current_coverage = 0.0

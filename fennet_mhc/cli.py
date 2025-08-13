@@ -1,3 +1,9 @@
+"""Command-line interface for Fennet-MHC.
+
+This module exposes subcommands to check the installation, embed proteins
+and peptides, and predict peptide binders for specified MHC class I alleles.
+"""
+
 import click
 
 import fennet_mhc
@@ -11,6 +17,10 @@ import fennet_mhc
 @click.pass_context
 @click.version_option(fennet_mhc.__version__, "-v", "--version")
 def run(ctx, **kwargs):
+    """Show banner and delegate to subcommands.
+
+    If called without a subcommand, prints the help text.
+    """
     click.echo(
         rf"""
                    _____                     _
@@ -34,6 +44,7 @@ def run(ctx, **kwargs):
     help="Check if this package works, and download the model files if missing.",
 )
 def check():
+    """Verify package setup and download models if missing."""
     import fennet_mhc.pipeline_api as pipeline_api
 
     pipeline_api.PretrainedModels(device="cpu")
@@ -63,6 +74,17 @@ def check():
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
 def embed_proteins(fasta, out_folder, device):
+    """Embed MHC class I protein sequences from a FASTA file.
+
+    Parameters
+    ----------
+    fasta : str
+        Path to FASTA file containing allele sequences (header as allele id).
+    out_folder : str
+        Output folder to write the serialized embeddings.
+    device : {"cpu","cuda","mps"}
+        Device used for inference.
+    """
     import fennet_mhc.pipeline_api as pipeline_api
 
     pipeline_api.embed_proteins(fasta, out_folder, device)
@@ -112,6 +134,19 @@ def embed_peptides(
     max_peptide_length,
     device,
 ):
+    """Embed peptides listed in a FASTA/TSV file.
+
+    Parameters
+    ----------
+    peptide_file : str
+        Input FASTA or delimited file with a column "sequence".
+    out_folder : str
+        Output folder to write the serialized embeddings.
+    min_peptide_length, max_peptide_length : int
+        Peptide length range used when digesting FASTA inputs.
+    device : {"cpu","cuda","mps"}
+        Device used for inference.
+    """
     import fennet_mhc.pipeline_api as pipeline_api
 
     pipeline_api.embed_peptides_from_file(
@@ -195,6 +230,27 @@ def predict_epitopes_for_mhc(
     hla_file,
     device,
 ):
+    """Predict peptide binders for the given MHC class I alleles.
+
+    Parameters
+    ----------
+    peptide_file : str
+        Input peptides (TSV/CSV with a "sequence" column or FASTA for digestion).
+    alleles : str
+        Comma-separated allele names, e.g. "A01_01,B07_02".
+    out_folder : str
+        Output folder for result files.
+    out_fasta_format : bool
+        If True, also write results in FASTA format.
+    min_peptide_length, max_peptide_length : int
+        Peptide length range for FASTA digestion.
+    outlier_distance : float
+        Threshold on best-allele distance used to filter peptides.
+    hla_file : str | None
+        Optional path to precomputed HLA embeddings (.pkl) or FASTA.
+    device : {"cpu","cuda","mps"}
+        Device used for inference.
+    """
     import fennet_mhc.pipeline_api as pipeline_api
 
     alleles = [x.strip() for x in alleles.split(",")]
