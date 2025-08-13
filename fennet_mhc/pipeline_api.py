@@ -17,6 +17,7 @@ from peptdeep.utils import _get_delimiter, set_logger
 
 from fennet_mhc.constants._const import (
     BACKGROUND_FASTA_PATH,
+    D_MODEL,
     FENNETMHC_MODEL_DIR,
     MHC_DF_FOR_EPITOPES_TSV,
     MHC_EMBEDDING_KEY,
@@ -69,10 +70,10 @@ class PretrainedModels:
         self._use_pseudo = use_pseudo
         _download_pretrained_models()
         self.hla_encoder = (
-            self._load_mhc_model_pseudo if use_pseudo else self._load_mhc_model()
+            self._load_mhc_model_pseudo() if use_pseudo else self._load_mhc_model()
         )
         self.pept_encoder = (
-            self._load_peptide_model_pseudo
+            self._load_peptide_model_pseudo()
             if use_pseudo
             else self._load_peptide_model()
         )
@@ -92,6 +93,37 @@ class PretrainedModels:
             MHC_EMBEDDING_PSEUDO_PATH if use_pseudo else MHC_EMBEDDING_PATH
         )
         self.hla_df.reset_index(drop=True, inplace=True)
+
+    def _embed_proteins_pseudo(self, protein_df: pd.DataFrame):
+        total_mhc_embeds = np.empty((0, D_MODEL), dtype=np.float32)
+        batch_size = 1024
+
+        logging.info(
+            f"Embedding MHC protein sequences using peptdeep model ...\n"
+            f"  Total sequences: {len(protein_df)}\n"
+            f"  Model embedding dimension: {D_MODEL}\n"
+            f"  Device: {self.device}\n"
+            f"  Batch size: {batch_size}\n"
+        )
+
+        with torch.no_grad():
+            for i in tqdm.tqdm(range(0, len(protein_df), batch_size)):
+                sequences = (
+                    protein_df["pseudo_sequence"].values[i : i + batch_size].astype(str)
+                )
+
+                mhc_embeds = embed_peptides(
+                    self.pept_encoder,
+                    sequences,
+                    d_model=D_MODEL,
+                    batch_size=batch_size,
+                    device=self.device,
+                )
+                total_mhc_embeds = np.concatenate(
+                    (total_mhc_embeds, mhc_embeds), axis=0
+                )
+
+        return total_mhc_embeds
 
     def embed_proteins(self, fasta: str):
         """Embed HLA protein sequences from a FASTA file.
@@ -113,6 +145,9 @@ class PretrainedModels:
         protein_df = load_fasta_list_as_protein_df([fasta])
         protein_df.rename(columns={"protein_id": "allele"}, inplace=True)
 
+        if self._use_pseudo:
+            return protein_df, self._embed_proteins_pseudo(protein_df)
+
         hla_esm_embedding_list = []
         batch_size = 100
 
@@ -121,7 +156,7 @@ class PretrainedModels:
             f"  Total sequences: {len(protein_df)}\n"
             f"  ESM-2 model: {self.esm2_model.__class__.__name__}\n"
             f"  ESM-2 model device: {self.device}\n"
-            f"  ESM-2 model embedding dimension: {self.esm2_model.embed_dim}\n"
+            f"  ESM-2 model embedding dimension: {D_MODEL}\n"
             f"  Batch size: {batch_size}\n"
         )
         with torch.no_grad():
@@ -189,7 +224,7 @@ class PretrainedModels:
             f"  Batch size: {batch_size}\n"
         )
         total_peptide_list = []
-        total_pept_embeds = np.empty((0, 480), dtype=np.float32)
+        total_pept_embeds = np.empty((0, D_MODEL), dtype=np.float32)
 
         for start_major in batches:
             if start_major + batch_size >= total_peptides_num:
@@ -204,7 +239,7 @@ class PretrainedModels:
             pept_embeds = embed_peptides(
                 self.pept_encoder,
                 peptide_list,
-                d_model=480,
+                d_model=D_MODEL,
                 batch_size=1024,
                 device=self.device,
             )
@@ -263,7 +298,7 @@ class PretrainedModels:
             f"  Total sequences: {len(input_peptide_list)}\n"
             f"  Batch size: {batch_size}\n"
         )
-        total_pept_embeds = np.empty((0, self.esm2_model.embed_dim), dtype=np.float32)
+        total_pept_embeds = np.empty((0, D_MODEL), dtype=np.float32)
 
         for start_major in batches:
             if start_major + batch_size >= len(input_peptide_list):
@@ -276,7 +311,7 @@ class PretrainedModels:
             pept_embeds = embed_peptides(
                 self.pept_encoder,
                 peptide_list,
-                d_model=self.esm2_model.embed_dim,
+                d_model=D_MODEL,
                 batch_size=1024,
                 device=self.device,
             )
