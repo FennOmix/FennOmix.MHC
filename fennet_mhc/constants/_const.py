@@ -42,3 +42,5 @@ PEPTIDE_DF_FOR_MHC_TSV = "peptide_df_for_MHC.tsv"
 MHC_DF_FOR_EPITOPES_TSV = "MHC_df_for_epitopes.tsv"
 PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV = "peptide_deconvolution_cluster_df.tsv"
 PEPTIDES_FOR_MHC_FASTA = "peptides_for_MHC.fasta"
+
+D_MODEL = 480
