@@ -53,7 +53,7 @@ def check():
     "--out-folder",
     type=click.Path(),
     required=True,
-    help="Folder path to save hla_embeddings.pkl.",
+    help="Folder path to save mhc_embeddings.pkl.",
 )
 @click.option(
     "--device",
@@ -322,7 +322,8 @@ def predict_mhc_binders_for_epitopes(
     type=int,
     default=8,
     show_default=True,
-    help="Number of kmeans centroids to cluster. It's better to add 1-2 to the number you expect, otherwise; some outliers may affect the clustering.",
+    help="Number of kmeans centroids to cluster. It's better to add 1-2 to "
+    "the number you expect, otherwise; some outliers may affect the clustering.",
 )
 @click.option(
     "--out-folder",
@@ -409,7 +410,8 @@ def deconvolute_peptides(
     type=int,
     default=8,
     show_default=True,
-    help="Number of kmeans centroids to cluster. It's better to add 1-2 to the number you expect, otherwise; some outliers may affect the clustering.",
+    help="Number of kmeans centroids to cluster. It's better to add 1-2 to "
+    "the number you expect, otherwise; some outliers may affect the clustering.",
 )
 @click.option(
     "--out-folder",
