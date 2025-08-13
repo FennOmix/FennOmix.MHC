@@ -16,6 +16,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 
+from .constants._const import D_MODEL
 from .mhc_utils import NonSpecificDigest
 
 random.seed(1337)
@@ -96,7 +97,7 @@ class ModelSeqEncoder(torch.nn.Module):
     """Encoder module for peptide sequences."""
 
     def __init__(
-        self, d_model: int = 480, layer_num: int = 4, dropout: float = 0.2
+        self, d_model: int = D_MODEL, layer_num: int = 4, dropout: float = 0.2
     ) -> None:
         """Initialize the sequence encoder.
 
@@ -136,7 +137,7 @@ class ModelHlaEncoder(torch.nn.Module):
     """Encoder for HLA embeddings."""
 
     def __init__(
-        self, d_model: int = 480, layer_num: int = 1, dropout: float = 0.2
+        self, d_model: int = D_MODEL, layer_num: int = 1, dropout: float = 0.2
     ) -> None:
         """Initialize the HLA encoder.
 
@@ -459,7 +460,7 @@ def embed_hla_esm_list(
 def embed_peptides(
     pept_encoder: ModelSeqEncoder,
     seqs: list[str],
-    d_model: int = 480,
+    d_model: int = D_MODEL,
     batch_size: int = 512,
     device: str | torch.device | None = None,
     verbose: bool = False,
