@@ -57,10 +57,13 @@ def check():
 )
 @click.option(
     "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
+    type=click.Choice(["auto", "cpu", "cuda", "mps"]),
+    default="auto",
     show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+    help=(
+        "Device to use. 'auto' picks best available (cuda > mps > cpu). "
+        "Options: 'auto', 'cpu', 'cuda' (NVIDIA GPUs), 'mps' (Apple Silicon)."
+    ),
 )
 def embed_proteins(fasta, out_folder, device):
     import fennet_mhc.pipeline_api as pipeline_api
@@ -100,10 +103,13 @@ def embed_proteins(fasta, out_folder, device):
 )
 @click.option(
     "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
+    type=click.Choice(["auto", "cpu", "cuda", "mps"]),
+    default="auto",
     show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+    help=(
+        "Device to use. 'auto' picks best available (cuda > mps > cpu). "
+        "Options: 'auto', 'cpu', 'cuda' (NVIDIA GPUs), 'mps' (Apple Silicon)."
+    ),
 )
 def embed_peptides(
     peptide_file,
@@ -173,16 +179,20 @@ def embed_peptides(
     "--hla-file",
     default=None,
     required=False,
-    help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
-    "If None, a default embeddings file cotaining 15672 alleles is provided. "
-    "If your desired alleles are not included in the default file, ",
+    help=(
+        "Path to a FASTA file of HLA sequences or a precomputed embeddings "
+        "pickle (.pkl). If None, a default library with 15,672 alleles is used."
+    ),
 )
 @click.option(
     "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
+    type=click.Choice(["auto", "cpu", "cuda", "mps"]),
+    default="auto",
     show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+    help=(
+        "Device to use. 'auto' picks best available (cuda > mps > cpu). "
+        "Options: 'auto', 'cpu', 'cuda' (NVIDIA GPUs), 'mps' (Apple Silicon)."
+    ),
 )
 def predict_epitopes_for_mhc(
     peptide_file,
@@ -250,17 +260,20 @@ def predict_epitopes_for_mhc(
 @click.option(
     "--hla-file",
     default=None,
-    help="Path to the pre-computed MHC protein embeddings file (.pkl). "
-    "If None, a default embeddings file will be used. "
-    "If your desired alleles are not included in the default file, "
-    "you can generate a custom embeddings file using the *embed_proteins* command.",
+    help=(
+        "Path to a precomputed HLA embeddings pickle (.pkl). If None, the "
+        "default library is used. To build a custom library, run embed-proteins."
+    ),
 )
 @click.option(
     "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
+    type=click.Choice(["auto", "cpu", "cuda", "mps"]),
+    default="auto",
     show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+    help=(
+        "Device to use. 'auto' picks best available (cuda > mps > cpu). "
+        "Options: 'auto', 'cpu', 'cuda' (NVIDIA GPUs), 'mps' (Apple Silicon)."
+    ),
 )
 def predict_mhc_binders_for_epitopes(
     peptide_file,
@@ -324,16 +337,20 @@ def predict_mhc_binders_for_epitopes(
     "--hla-file",
     default=None,
     required=False,
-    help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
-    "If None, a default embeddings file cotaining 15672 alleles is provided. "
-    "If your desired alleles are not included in the default file, ",
+    help=(
+        "Path to a FASTA file of HLA sequences or a precomputed embeddings "
+        "pickle (.pkl). If None, a default library with 15,672 alleles is used."
+    ),
 )
 @click.option(
     "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
+    type=click.Choice(["auto", "cpu", "cuda", "mps"]),
+    default="auto",
     show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+    help=(
+        "Device to use. 'auto' picks best available (cuda > mps > cpu). "
+        "Options: 'auto', 'cpu', 'cuda' (NVIDIA GPUs), 'mps' (Apple Silicon)."
+    ),
 )
 def deconvolute_peptides(
     peptide_file,
@@ -413,16 +430,20 @@ def deconvolute_peptides(
     "--hla-file",
     default=None,
     required=False,
-    help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
-    "If None, a default embeddings file cotaining 15672 alleles is provided. "
-    "If your desired alleles are not included in the default file, ",
+    help=(
+        "Path to a FASTA file of HLA sequences or a precomputed embeddings "
+        "pickle (.pkl). If None, a default library with 15,672 alleles is used."
+    ),
 )
 @click.option(
     "--device",
-    type=click.Choice(["cpu", "cuda", "mps"]),
-    default="cuda",
+    type=click.Choice(["auto", "cpu", "cuda", "mps"]),
+    default="auto",
     show_default=True,
-    help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+    help=(
+        "Device to use. 'auto' picks best available (cuda > mps > cpu). "
+        "Options: 'auto', 'cpu', 'cuda' (NVIDIA GPUs), 'mps' (Apple Silicon)."
+    ),
 )
 def deconvolute_and_predict_peptides(
     peptide_file_to_deconv,
@@ -453,4 +474,5 @@ def deconvolute_and_predict_peptides(
 
 
 if __name__ == "__main__":
+    run()
     run()

@@ -17,7 +17,7 @@ maintainers = [
 ]
 description = "Fennet-MHC"
 readme = "README.md"
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE"}
 keywords = [
   "contrastive learning", "protein language model",
   "immunopeptidomics", "mass spectrometry",
@@ -25,7 +25,14 @@ keywords = [
 ]
 classifiers = [
   "Development Status :: 1 - Planning",
-  "Programming Language :: Python"
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
 ]
 # __classifiers__ = [
 #     "Development Status :: 1 - Planning",
@@ -44,10 +51,9 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://fennomix.lab.westlake.edu.cn"
-Documentation = "https://readthedocs.org"
-Repository = "https://github.com/FennOmix/fennet.mhc.git"
-"Bug Tracker" = "https://github.com/FennOmix/fennet.mhc/issues"
-Changelog = "https://github.com/FennOmix/fennet.mhc/blob/main/CHANGELOG.md"
+Documentation = "https://fennet-mhc.readthedocs.io/en/latest"
+Repository = "https://github.com/FennOmix/FeNNet.MHC"
+"Bug Tracker" = "https://github.com/FennOmix/FeNNet.MHC/issues"
 
 [project.scripts]
 fennet-mhc = "fennet_mhc.cli:run"
