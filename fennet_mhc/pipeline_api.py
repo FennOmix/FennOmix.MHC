@@ -1223,7 +1223,7 @@ def _download_pretrained_models(
 
         logging.info(f"Downloading `{global_settings[MHC_EMBEDDING_PSEUDO_KEY]}` ...")
         requests = urllib.request.urlopen(
-            hla_embedding_url, context=context, timeout=10
+            hla_embedding_pseudo_url, context=context, timeout=10
         )
         with open(MHC_EMBEDDING_PSEUDO_PATH, "wb") as f:
             f.write(requests.read())
@@ -1241,7 +1241,9 @@ def _download_pretrained_models(
             f.write(requests.read())
 
         logging.info(f"Downloading `{global_settings[PEPTIDE_MODEL_PSEUDO_KEY]}` ...")
-        requests = urllib.request.urlopen(peptide_url, context=context, timeout=10)
+        requests = urllib.request.urlopen(
+            peptide_pseudo_url, context=context, timeout=10
+        )
         with open(PEPTIDE_MODEL_PSEUDO_PATH, "wb") as f:
             f.write(requests.read())
 
@@ -1251,7 +1253,7 @@ def _download_pretrained_models(
             f.write(requests.read())
 
         logging.info(f"Downloading `{global_settings[MHC_MODEL_PSEUDO_KEY]}` ...")
-        requests = urllib.request.urlopen(hla_url, context=context, timeout=10)
+        requests = urllib.request.urlopen(hla_pseudo_url, context=context, timeout=10)
         with open(MHC_MODEL_PSEUDO_PATH, "wb") as f:
             f.write(requests.read())
     except Exception as e:
