@@ -3,7 +3,7 @@ requires = ["setuptools == 63.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fennet-mhc"
+name = "fennomix-mhc"
 requires-python = ">=3.10,<3.12"
 dynamic = ["version", "dependencies", "optional-dependencies"]
 
@@ -15,7 +15,7 @@ maintainers = [
   {name = "Wen-Feng Zeng", email = "zengwenfeng@westlake.edu.cn"},
   {name = "Jin-Tao Cheng", email = "1274873858@qq.com"}
 ]
-description = "Fennet-MHC"
+description = "FennOmix-MHC"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
 keywords = [
@@ -45,25 +45,25 @@ classifiers = [
 [project.urls]
 Homepage = "https://fennomix.lab.westlake.edu.cn"
 Documentation = "https://readthedocs.org"
-Repository = "https://github.com/FennOmix/fennet.mhc.git"
-"Bug Tracker" = "https://github.com/FennOmix/fennet.mhc/issues"
-Changelog = "https://github.com/FennOmix/fennet.mhc/blob/main/CHANGELOG.md"
+Repository = "https://github.com/FennOmix/fennomix.mhc.git"
+"Bug Tracker" = "https://github.com/FennOmix/fennomix.mhc/issues"
+Changelog = "https://github.com/FennOmix/fennomix.mhc/blob/main/CHANGELOG.md"
 
 [project.scripts]
-fennet-mhc = "fennet_mhc.cli:run"
+fennomix-mhc = "fennomix_mhc.cli:run"
 
 # [project.gui-scripts]
-# fennet-gui = "fennet:main_gui"
+# fennomix-gui = "fennomix:main_gui"
 
-# [project.entry-points."fennet_mhc"]
-# fennet_mhc = "fennet_mhc:main"
+# [project.entry-points."fennomix_mhc"]
+# fennomix_mhc = "fennomix_mhc:main"
 
 [tool.setuptools]
 py-modules = []
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["fennet*"]
+include = ["fennomix*"]
 
 [tool.setuptools.dynamic]
 # https://stackoverflow.com/a/73600610[from alphaX]
@@ -76,7 +76,7 @@ optional-dependencies.development = { file = [
     "requirements/requirements_tests.txt",
     "requirements/requirements_docs.txt"] }
 
-version = {attr = "fennet_mhc.__version__"}
+version = {attr = "fennomix_mhc.__version__"}
 
 [tool.ruff.format]
 # Use `\n` line endings for all files

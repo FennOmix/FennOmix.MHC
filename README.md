@@ -1,8 +1,8 @@
-# Fennet-MHC
+# FennOmix-MHC
 
 Foundation model for MHC class I peptide binding prediction built on deep contrastive learning.
 
-See the [online documentation](https://fennet.mhc.readthedocs.io/en/latest) for
+See the [online documentation](https://fennomix.mhc.readthedocs.io/en/latest) for
 full API details and tutorials.
 
 ## Installation
@@ -10,42 +10,42 @@ full API details and tutorials.
 Install the latest release from PyPI:
 
 ```bash
-pip install fennet-mhc
+pip install fennomix-mhc
 ```
 
 Or install the development version directly from GitHub:
 
 ```bash
-pip install git+https://github.com/FennOmix/FeNNet.MHC.git
+pip install git+https://github.com/FennOmix/FennOmix.MHC.git
 ```
 
 ## Command line interface
 
-After installation the `fennet-mhc` command exposes several sub-commands.  The examples below assume your peptide or protein sequences are stored in FASTA or tabular files.
+After installation the `fennomix-mhc` command exposes several sub-commands.  The examples below assume your peptide or protein sequences are stored in FASTA or tabular files.
 
 ### Embed MHC proteins
 
 ```bash
-fennet-mhc embed-proteins --fasta my_hla.fasta --out-folder ./output
+fennomix-mhc embed-proteins --fasta my_hla.fasta --out-folder ./output
 ```
 
 ### Embed peptides
 
 ```bash
-fennet-mhc embed-peptides --peptide-file peptides.tsv --out-folder ./output
+fennomix-mhc embed-peptides --peptide-file peptides.tsv --out-folder ./output
 ```
 
 ### Predict epitopes for MHC alleles
 
 ```bash
-fennet-mhc predict-epitopes-for-mhc --peptide-file peptides.tsv \
+fennomix-mhc predict-epitopes-for-mhc --peptide-file peptides.tsv \
     --alleles A02_01,B07_02 --out-folder ./output
 ```
 
 ### Predict MHC binders for given epitopes
 
 ```bash
-fennet-mhc predict-mhc-binders-for-epitopes --peptide-file peptides.tsv \
+fennomix-mhc predict-mhc-binders-for-epitopes --peptide-file peptides.tsv \
     --out-folder ./output
 ```
 
@@ -53,10 +53,10 @@ Additional commands `deconvolute-peptides` and `deconvolute-and-predict-peptides
 
 ## Pipeline API
 
-All functionality of the command line interface is available through the `fennet_mhc.pipeline_api` module:
+All functionality of the command line interface is available through the `fennomix_mhc.pipeline_api` module:
 
 ```python
-from fennet_mhc.pipeline_api import (
+from fennomix_mhc.pipeline_api import (
     embed_proteins,
     embed_peptides_from_file,
     predict_epitopes_for_mhc,

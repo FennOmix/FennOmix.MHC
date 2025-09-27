@@ -1,4 +1,4 @@
-recursive-include fennet_mhc *
+recursive-include fennomix_mhc *
 include LICENSE.txt
 include README.md
-recursive-exclude fennet_mhc/logs *
+recursive-exclude fennomix_mhc/logs *

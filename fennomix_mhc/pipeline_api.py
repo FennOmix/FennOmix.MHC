@@ -18,7 +18,7 @@ from peptdeep.utils import _get_delimiter, set_logger
 from fennomix_mhc.constants._const import (
     BACKGROUND_FASTA_PATH,
     D_MODEL,
-    FENNETMHC_MODEL_DIR,
+    FENNOMIXMHC_MODEL_DIR,
     MHC_DF_FOR_EPITOPES_TSV,
     MHC_EMBEDDING_KEY,
     MHC_EMBEDDING_PATH,
@@ -1175,7 +1175,7 @@ def _set_device(device: str) -> str:
 
 
 def _download_pretrained_models(
-    base_url: str = None, model_dir: str = FENNETMHC_MODEL_DIR
+    base_url: str = None, model_dir: str = FENNOMIXMHC_MODEL_DIR
 ):
     """
     Download pretrained models from a given URL.

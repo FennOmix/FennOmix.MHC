@@ -40,7 +40,7 @@ def check():
 
 
 @run.command(
-    "embed-proteins", help="Embed MHC class I proteins using Fennet-MHC MHC encoder"
+    "embed-proteins", help="Embed MHC class I proteins using FennOmix-MHC MHC encoder"
 )
 @click.option(
     "--fasta",
@@ -70,7 +70,7 @@ def embed_proteins(fasta, out_folder, device):
 
 @run.command(
     "embed-peptides",
-    help="Embed peptides that non-specifically digested from fasta/tsv using Fennet-MHC peptide encoder",
+    help="Embed peptides that non-specifically digested from fasta/tsv using FennOmix-MHC peptide encoder",
 )
 @click.option(
     "--peptide-file",

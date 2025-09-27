@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 
-project = "fennet-mhc"
+project = "fennomix-mhc"
 copyright = "2025, FennOmix Lab, Westlake University, China"
 author = "Wen-Feng Zeng"
 
@@ -50,7 +50,7 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-code_url = "https://github.com/FennOmix/FeNNet.MHC/blob/main"
+code_url = "https://github.com/FennOmix/FennOmix.MHC/blob/main"
 
 
 def linkcode_resolve(domain, info):
@@ -84,7 +84,7 @@ def linkcode_resolve(domain, info):
         # Ignore OSError: could not get source code
         return None
     file = os.path.relpath(file, os.path.abspath(".."))
-    if not file.startswith("fennet_mhc"):
+    if not file.startswith("fennomix_mhc"):
         # e.g. object is a typing.NewType
         return None
     start, end = lines[1], lines[1] + len(lines[0]) - 1

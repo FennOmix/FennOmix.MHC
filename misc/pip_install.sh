@@ -26,4 +26,4 @@ conda run -n $ENV_NAME --no-capture-output pip install -e "../.$INSTALL_STRING"
 conda run -n $ENV_NAME --no-capture-output pip freeze
 
 # check and download the model
-conda run -n $ENV_NAME --no-capture-output fennet-mhc check
+conda run -n $ENV_NAME --no-capture-output fennomix-mhc check
