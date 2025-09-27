@@ -15,7 +15,7 @@ import tqdm
 from alphabase.protein.fasta import load_fasta_list_as_protein_df
 from peptdeep.utils import _get_delimiter, set_logger
 
-from fennet_mhc.constants._const import (
+from fennomix_mhc.constants._const import (
     BACKGROUND_FASTA_PATH,
     D_MODEL,
     FENNETMHC_MODEL_DIR,
@@ -37,14 +37,14 @@ from fennet_mhc.constants._const import (
     PEPTIDES_FOR_MHC_FASTA,
     global_settings,
 )
-from fennet_mhc.mhc_binding_model import (
+from fennomix_mhc.mhc_binding_model import (
     ModelHlaEncoder,
     ModelSeqEncoder,
     embed_hla_esm_list,
     embed_peptides,
 )
-from fennet_mhc.mhc_binding_retriever import MHCBindingRetriever
-from fennet_mhc.mhc_utils import NonSpecificDigest
+from fennomix_mhc.mhc_binding_retriever import MHCBindingRetriever
+from fennomix_mhc.mhc_utils import NonSpecificDigest
 
 
 class PretrainedModels:

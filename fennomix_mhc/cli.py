@@ -1,6 +1,6 @@
 import click
 
-import fennet_mhc
+import fennomix_mhc
 
 
 @click.group(
@@ -9,7 +9,7 @@ import fennet_mhc
     help="Foundation model to embed molecules and peptides for MHC class I binding prediction",
 )
 @click.pass_context
-@click.version_option(fennet_mhc.__version__, "-v", "--version")
+@click.version_option(fennomix_mhc.__version__, "-v", "--version")
 def run(ctx, **kwargs):
     click.echo(
         rf"""
@@ -19,9 +19,9 @@ def run(ctx, **kwargs):
                   |  _|  __/ | | | | | |  __/ |_
                   |_|  \___|_| |_|_| |_|\___|\__|
         ...................................................
-        .{fennet_mhc.__version__.center(50)}.
-        .{fennet_mhc.__github__.center(50)}.
-        .{fennet_mhc.__license__.center(50)}.
+        .{fennomix_mhc.__version__.center(50)}.
+        .{fennomix_mhc.__github__.center(50)}.
+        .{fennomix_mhc.__license__.center(50)}.
         ...................................................
         """
     )
@@ -34,7 +34,7 @@ def run(ctx, **kwargs):
     help="Check if this package works, and download the model files if missing.",
 )
 def check():
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     pipeline_api.PretrainedModels(device="cpu")
 
@@ -63,7 +63,7 @@ def check():
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
 def embed_proteins(fasta, out_folder, device):
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     pipeline_api.embed_proteins(fasta, out_folder, device)
 
@@ -119,7 +119,7 @@ def embed_peptides(
     device,
     use_pseudo,
 ):
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     pipeline_api.embed_peptides_from_file(
         peptide_file,
@@ -210,7 +210,7 @@ def predict_epitopes_for_mhc(
     device,
     use_pseudo,
 ):
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     alleles = [x.strip() for x in alleles.split(",")]
     pipeline_api.predict_epitopes_for_mhc(
@@ -294,7 +294,7 @@ def predict_mhc_binders_for_epitopes(
     device,
     use_pseudo,
 ):
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     pipeline_api.predict_mhc_binders_for_epitopes(
         peptide_file,
@@ -376,7 +376,7 @@ def deconvolute_peptides(
     device,
     use_pseudo,
 ):
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     pipeline_api.deconvolute_peptides(
         peptide_file,
@@ -477,7 +477,7 @@ def deconvolute_and_predict_peptides(
     device,
     use_pseudo,
 ):
-    import fennet_mhc.pipeline_api as pipeline_api
+    import fennomix_mhc.pipeline_api as pipeline_api
 
     pipeline_api.deconvolute_and_predict_peptides(
         peptide_file_to_deconv,
