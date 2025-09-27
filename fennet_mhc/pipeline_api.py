@@ -17,13 +17,23 @@ from peptdeep.utils import _get_delimiter, set_logger
 
 from fennet_mhc.constants._const import (
     BACKGROUND_FASTA_PATH,
+    D_MODEL,
     FENNETMHC_MODEL_DIR,
-    HLA_EMBEDDING_PATH,
-    HLA_MODEL_PATH,
     MHC_DF_FOR_EPITOPES_TSV,
+    MHC_EMBEDDING_KEY,
+    MHC_EMBEDDING_PATH,
+    MHC_EMBEDDING_PSEUDO_KEY,
+    MHC_EMBEDDING_PSEUDO_PATH,
+    MHC_MODEL_KEY,
+    MHC_MODEL_PATH,
+    MHC_MODEL_PSEUDO_KEY,
+    MHC_MODEL_PSEUDO_PATH,
     PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV,
     PEPTIDE_DF_FOR_MHC_TSV,
+    PEPTIDE_MODEL_KEY,
     PEPTIDE_MODEL_PATH,
+    PEPTIDE_MODEL_PSEUDO_KEY,
+    PEPTIDE_MODEL_PSEUDO_PATH,
     PEPTIDES_FOR_MHC_FASTA,
     global_settings,
 )
@@ -42,10 +52,10 @@ class PretrainedModels:
 
     This class lazily downloads the required model weights and provides
     convenience methods to embed proteins and peptides as well as to predict
-    peptide--MHC interactions.
+    peptide-MHC interactions.
     """
 
-    def __init__(self, device: str = "cuda"):
+    def __init__(self, device: str = "cuda", use_pseudo: bool = False):
         """Initialize the pretrained models and load model weights.
 
         Parameters
@@ -53,24 +63,67 @@ class PretrainedModels:
         device : str, optional
             Device used for inference (``"cuda"``, ``"cpu"`` or ``"mps"``),
             by default ``"cuda"``.
+        use_pseudo : bool, optional
+            Whether to use the pseudo model, by default ``False``.
         """
         self.device = _set_device(device)
+        self._use_pseudo = use_pseudo
         _download_pretrained_models()
-        self.hla_encoder = self._load_hla_model()
-        self.pept_encoder = self._load_peptide_model()
+        self.hla_encoder = (
+            self._load_mhc_model_pseudo() if use_pseudo else self._load_mhc_model()
+        )
+        self.pept_encoder = (
+            self._load_peptide_model_pseudo()
+            if use_pseudo
+            else self._load_peptide_model()
+        )
         self.hla_encoder.eval()
         self.pept_encoder.eval()
 
-        self.esm2_model, self.esm2_alphabet = esm.pretrained.esm2_t12_35M_UR50D()
-        self.esm2_model.to(self.device)
-        self.esm2_model.eval()
-        self.batch_converter = self.esm2_alphabet.get_batch_converter()
+        if not use_pseudo:
+            self.esm2_model, self.esm2_alphabet = esm.pretrained.esm2_t12_35M_UR50D()
+            self.esm2_model.to(self.device)
+            self.esm2_model.eval()
+            self.batch_converter = self.esm2_alphabet.get_batch_converter()
 
         self.background_protein_df = load_fasta_list_as_protein_df(
             [BACKGROUND_FASTA_PATH]
         )
-        self.hla_df, self.hla_embeddings = _load_hla_embedding_pkl(HLA_EMBEDDING_PATH)
+        self.hla_df, self.hla_embeddings = _load_hla_embedding_pkl(
+            MHC_EMBEDDING_PSEUDO_PATH if use_pseudo else MHC_EMBEDDING_PATH
+        )
         self.hla_df.reset_index(drop=True, inplace=True)
+
+    def _embed_proteins_pseudo(self, protein_df: pd.DataFrame):
+        total_mhc_embeds = np.empty((0, D_MODEL), dtype=np.float32)
+        batch_size = 1024
+
+        logging.info(
+            f"Embedding MHC protein sequences using peptdeep model ...\n"
+            f"  Total sequences: {len(protein_df)}\n"
+            f"  Model embedding dimension: {D_MODEL}\n"
+            f"  Device: {self.device}\n"
+            f"  Batch size: {batch_size}\n"
+        )
+
+        with torch.no_grad():
+            for i in tqdm.tqdm(range(0, len(protein_df), batch_size)):
+                sequences = (
+                    protein_df["pseudo_sequence"].values[i : i + batch_size].astype(str)
+                )
+
+                mhc_embeds = embed_peptides(
+                    self.pept_encoder,
+                    sequences,
+                    d_model=D_MODEL,
+                    batch_size=batch_size,
+                    device=self.device,
+                )
+                total_mhc_embeds = np.concatenate(
+                    (total_mhc_embeds, mhc_embeds), axis=0
+                )
+
+        return total_mhc_embeds
 
     def embed_proteins(self, fasta: str):
         """Embed HLA protein sequences from a FASTA file.
@@ -92,6 +145,9 @@ class PretrainedModels:
         protein_df = load_fasta_list_as_protein_df([fasta])
         protein_df.rename(columns={"protein_id": "allele"}, inplace=True)
 
+        if self._use_pseudo:
+            return protein_df, self._embed_proteins_pseudo(protein_df)
+
         hla_esm_embedding_list = []
         batch_size = 100
 
@@ -100,7 +156,7 @@ class PretrainedModels:
             f"  Total sequences: {len(protein_df)}\n"
             f"  ESM-2 model: {self.esm2_model.__class__.__name__}\n"
             f"  ESM-2 model device: {self.device}\n"
-            f"  ESM-2 model embedding dimension: {self.esm2_model.embed_dim}\n"
+            f"  ESM-2 model embedding dimension: {D_MODEL}\n"
             f"  Batch size: {batch_size}\n"
         )
         with torch.no_grad():
@@ -168,7 +224,7 @@ class PretrainedModels:
             f"  Batch size: {batch_size}\n"
         )
         total_peptide_list = []
-        total_pept_embeds = np.empty((0, 480), dtype=np.float32)
+        total_pept_embeds = np.empty((0, D_MODEL), dtype=np.float32)
 
         for start_major in batches:
             if start_major + batch_size >= total_peptides_num:
@@ -183,7 +239,7 @@ class PretrainedModels:
             pept_embeds = embed_peptides(
                 self.pept_encoder,
                 peptide_list,
-                d_model=480,
+                d_model=D_MODEL,
                 batch_size=1024,
                 device=self.device,
             )
@@ -242,7 +298,7 @@ class PretrainedModels:
             f"  Total sequences: {len(input_peptide_list)}\n"
             f"  Batch size: {batch_size}\n"
         )
-        total_pept_embeds = np.empty((0, self.esm2_model.embed_dim), dtype=np.float32)
+        total_pept_embeds = np.empty((0, D_MODEL), dtype=np.float32)
 
         for start_major in batches:
             if start_major + batch_size >= len(input_peptide_list):
@@ -255,7 +311,7 @@ class PretrainedModels:
             pept_embeds = embed_peptides(
                 self.pept_encoder,
                 peptide_list,
-                d_model=self.esm2_model.embed_dim,
+                d_model=D_MODEL,
                 batch_size=1024,
                 device=self.device,
             )
@@ -534,12 +590,23 @@ class PretrainedModels:
 
         return cluster_df, centroids
 
-    def _load_hla_model(self):
-        """Load the pretrained HLA encoder model."""
+    def _load_mhc_model(self):
+        """Load the pretrained MHC encoder model."""
         hla_encoder = ModelHlaEncoder()
         hla_encoder.to(self.device)
         hla_encoder.load_state_dict(
-            torch.load(HLA_MODEL_PATH, weights_only=True, map_location=self.device)
+            torch.load(MHC_MODEL_PATH, weights_only=True, map_location=self.device)
+        )
+        return hla_encoder
+
+    def _load_mhc_model_pseudo(self):
+        """Load the pretrained pseudo MHC encoder model."""
+        hla_encoder = ModelSeqEncoder()
+        hla_encoder.to(self.device)
+        hla_encoder.load_state_dict(
+            torch.load(
+                MHC_MODEL_PSEUDO_PATH, weights_only=True, map_location=self.device
+            )
         )
         return hla_encoder
 
@@ -549,6 +616,17 @@ class PretrainedModels:
         pept_encoder.to(self.device)
         pept_encoder.load_state_dict(
             torch.load(PEPTIDE_MODEL_PATH, weights_only=True, map_location=self.device)
+        )
+        return pept_encoder
+
+    def _load_peptide_model_pseudo(self):
+        """Load the pretrained pseudo peptide encoder model."""
+        pept_encoder = ModelSeqEncoder()
+        pept_encoder.to(self.device)
+        pept_encoder.load_state_dict(
+            torch.load(
+                PEPTIDE_MODEL_PSEUDO_PATH, weights_only=True, map_location=self.device
+            )
         )
         return pept_encoder
 
@@ -597,6 +675,7 @@ def embed_peptides_from_file(
     min_peptide_length: int = 8,
     max_peptide_length: int = 12,
     device: str = "cuda",
+    use_pseudo: bool = False,
 ):
     """Embed peptides provided in a FASTA or tabular file and save them.
 
@@ -614,6 +693,8 @@ def embed_peptides_from_file(
     device : str, optional
         Device used for embedding (``"cuda"``, ``"cpu"`` or ``"mps"``), by
         default ``"cuda"``.
+    use_pseudo : bool, optional
+        Whether to use the pseudo model for embedding, by default ``False``.
 
     Returns
     -------
@@ -625,7 +706,7 @@ def embed_peptides_from_file(
         log_level=global_settings["log_level"].lower(),
     )
 
-    pretrained_models = PretrainedModels(device=device)
+    pretrained_models = PretrainedModels(device=device, use_pseudo=use_pseudo)
 
     logging.info(f"Embedding peptides from file `{peptide_file_path}` ...\n")
     if peptide_file_path.lower().endswith(".fasta"):
@@ -662,6 +743,7 @@ def predict_epitopes_for_mhc(
     outlier_distance: float = 0.4,
     hla_file_path: str = None,
     device: str = "cuda",
+    use_pseudo: bool = False,
 ):
     """Predict peptide binders for the given MHC alleles.
 
@@ -687,6 +769,8 @@ def predict_epitopes_for_mhc(
     device : str, optional
         Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
         by default ``"cuda"``.
+    use_pseudo : bool, optional
+        Whether to use the pseudo model for embedding, by default ``False``.
 
     Returns
     -------
@@ -698,7 +782,7 @@ def predict_epitopes_for_mhc(
         log_level=global_settings["log_level"].lower(),
     )
 
-    pretrained_models = PretrainedModels(device=device)
+    pretrained_models = PretrainedModels(device=device, use_pseudo=use_pseudo)
 
     logging.info(f"Loading peptide embeddings from `{peptide_file_path}` ...\n")
     peptide_list, pept_embeds = _load_peptide_embeddings(
@@ -745,6 +829,7 @@ def predict_mhc_binders_for_epitopes(
     outlier_distance: float = 0.4,
     hla_file_path: str = None,
     device: str = "cuda",
+    use_pseudo: bool = False,
 ):
     """Find MHC binders for the given peptides (epitopes).
 
@@ -765,6 +850,8 @@ def predict_mhc_binders_for_epitopes(
     device : str, optional
         Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
         by default ``"cuda"``.
+    use_pseudo : bool, optional
+        Whether to use the pseudo model for embedding, by default ``False``.
 
     Returns
     -------
@@ -776,7 +863,7 @@ def predict_mhc_binders_for_epitopes(
         log_level=global_settings["log_level"].lower(),
     )
 
-    pretrained_models = PretrainedModels(device=device)
+    pretrained_models = PretrainedModels(device=device, use_pseudo=use_pseudo)
 
     logging.info(f"Loading peptide embeddings from {peptide_file_path} ...\n")
     peptide_list, pept_embeds = _load_peptide_embeddings(
@@ -814,6 +901,7 @@ def deconvolute_peptides(
     outlier_distance: float = 100,
     hla_file_path: str = None,
     device: str = "cuda",
+    use_pseudo: bool = False,
 ):
     """Cluster peptides and assign a representative allele to each cluster.
 
@@ -836,6 +924,8 @@ def deconvolute_peptides(
     device : str, optional
         Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
         by default ``"cuda"``.
+    use_pseudo : bool, optional
+        Whether to use the pseudo model for embedding, by default ``False``.
 
     Returns
     -------
@@ -847,7 +937,7 @@ def deconvolute_peptides(
         log_level=global_settings["log_level"].lower(),
     )
 
-    pretrained_models = PretrainedModels(device=device)
+    pretrained_models = PretrainedModels(device=device, use_pseudo=use_pseudo)
 
     logging.info(f"Loading peptide embeddings from `{peptide_file_path}` ...\n")
     peptide_list, pept_embeds = _load_peptide_embeddings(
@@ -899,6 +989,7 @@ def deconvolute_and_predict_peptides(
     outlier_distance: float = 0.2,
     hla_file_path: str | Path = None,
     device: str = "cuda",
+    use_pseudo: bool = False,
 ):
     """Cluster peptides, deduce "pseudo" alleles, and predict binders for
     another peptide set.
@@ -930,6 +1021,8 @@ def deconvolute_and_predict_peptides(
     device : str, optional
         Device for running the model (``"cuda"``, ``"cpu"`` or ``"mps"``),
         by default ``"cuda"``.
+    use_pseudo : bool, optional
+        Whether to use the pseudo model for embedding, by default ``False``.
 
     Returns
     -------
@@ -941,7 +1034,7 @@ def deconvolute_and_predict_peptides(
         log_level=global_settings["log_level"].lower(),
     )
 
-    pretrained_models = PretrainedModels(device=device)
+    pretrained_models = PretrainedModels(device=device, use_pseudo=use_pseudo)
 
     logging.info(
         f"Loading peptide embeddings to deconv from `{peptide_file_path_to_deconv}` ...\n"
@@ -1092,34 +1185,47 @@ def _download_pretrained_models(
         model_dir (str): The directory to save the downloaded models.
     """
     if base_url is None:
-        base_url = global_settings["hla_url"]
+        base_url = global_settings["download_url"]
     base_url += "" if base_url.endswith("/") else "/"
     os.makedirs(model_dir, exist_ok=True)
 
-    peptide_url = base_url + global_settings["peptide_model"]
-    hla_url = base_url + global_settings["hla_model"]
-    hla_embedding_url = base_url + global_settings["hla_embedding"]
+    peptide_url = base_url + global_settings[PEPTIDE_MODEL_KEY]
+    hla_url = base_url + global_settings[MHC_MODEL_KEY]
+    hla_embedding_url = base_url + global_settings[MHC_EMBEDDING_KEY]
+    peptide_pseudo_url = base_url + global_settings[PEPTIDE_MODEL_PSEUDO_KEY]
+    hla_pseudo_url = base_url + global_settings[MHC_MODEL_PSEUDO_KEY]
+    hla_embedding_pseudo_url = base_url + global_settings[MHC_EMBEDDING_PSEUDO_KEY]
     background_fasta_url = base_url + global_settings["background_fasta"]
 
-    if os.path.exists(HLA_MODEL_PATH) and os.path.exists(PEPTIDE_MODEL_PATH):
+    if os.path.exists(MHC_MODEL_PATH) and os.path.exists(PEPTIDE_MODEL_PATH):
         logging.info("Pretrained models already exist. Skipping download.")
         return
 
     logging.info(
         f"Downloading required files ...:\n"
-        f"  `{global_settings['peptide_model']}` from `{peptide_url}`\n"
-        f"  `{global_settings['hla_model']}` from`{hla_url}`\n"
-        f"  `{global_settings['hla_embedding']}` from`{hla_embedding_url}`\n"
+        f"  `{global_settings[PEPTIDE_MODEL_KEY]}` from `{peptide_url}`\n"
+        f"  `{global_settings[MHC_MODEL_KEY]}` from`{hla_url}`\n"
+        f"  `{global_settings[MHC_EMBEDDING_KEY]}` from`{hla_embedding_url}`\n"
+        f"  `{global_settings[PEPTIDE_MODEL_PSEUDO_KEY]}` from `{peptide_pseudo_url}`\n"
+        f"  `{global_settings[MHC_MODEL_PSEUDO_KEY]}` from`{hla_pseudo_url}`\n"
+        f"  `{global_settings[MHC_EMBEDDING_PSEUDO_KEY]}` from`{hla_embedding_pseudo_url}`\n"
         f"  `{global_settings['background_fasta']}` from`{background_fasta_url}`"
     )
     try:
         context = ssl._create_unverified_context()
 
-        logging.info(f"Downloading `{global_settings['hla_embedding']}` ...")
+        logging.info(f"Downloading `{global_settings[MHC_EMBEDDING_KEY]}` ...")
         requests = urllib.request.urlopen(
             hla_embedding_url, context=context, timeout=10
         )
-        with open(HLA_EMBEDDING_PATH, "wb") as f:
+        with open(MHC_EMBEDDING_PATH, "wb") as f:
+            f.write(requests.read())
+
+        logging.info(f"Downloading `{global_settings[MHC_EMBEDDING_PSEUDO_KEY]}` ...")
+        requests = urllib.request.urlopen(
+            hla_embedding_pseudo_url, context=context, timeout=10
+        )
+        with open(MHC_EMBEDDING_PSEUDO_PATH, "wb") as f:
             f.write(requests.read())
 
         logging.info(f"Downloading `{global_settings['background_fasta']}` ...")
@@ -1129,14 +1235,26 @@ def _download_pretrained_models(
         with open(BACKGROUND_FASTA_PATH, "wb") as f:
             f.write(requests.read())
 
-        logging.info(f"Downloading `{global_settings['peptide_model']}` ...")
+        logging.info(f"Downloading `{global_settings[PEPTIDE_MODEL_KEY]}` ...")
         requests = urllib.request.urlopen(peptide_url, context=context, timeout=10)
         with open(PEPTIDE_MODEL_PATH, "wb") as f:
             f.write(requests.read())
 
-        logging.info(f"Downloading `{global_settings['hla_model']}` ...")
+        logging.info(f"Downloading `{global_settings[PEPTIDE_MODEL_PSEUDO_KEY]}` ...")
+        requests = urllib.request.urlopen(
+            peptide_pseudo_url, context=context, timeout=10
+        )
+        with open(PEPTIDE_MODEL_PSEUDO_PATH, "wb") as f:
+            f.write(requests.read())
+
+        logging.info(f"Downloading `{global_settings[MHC_MODEL_KEY]}` ...")
         requests = urllib.request.urlopen(hla_url, context=context, timeout=10)
-        with open(HLA_MODEL_PATH, "wb") as f:
+        with open(MHC_MODEL_PATH, "wb") as f:
+            f.write(requests.read())
+
+        logging.info(f"Downloading `{global_settings[MHC_MODEL_PSEUDO_KEY]}` ...")
+        requests = urllib.request.urlopen(hla_pseudo_url, context=context, timeout=10)
+        with open(MHC_MODEL_PSEUDO_PATH, "wb") as f:
             f.write(requests.read())
     except Exception as e:
         raise RuntimeError(f"Failed to download models: {e}") from e
@@ -1233,7 +1351,7 @@ def _load_hla_embedding_pkl(fname=None):
         The protein dataframe and corresponding embeddings.
     """
     if fname is None:
-        fname = HLA_EMBEDDING_PATH
+        fname = MHC_EMBEDDING_PATH
     if not os.path.exists(fname):
         raise FileNotFoundError(f".pkl file not found: {fname}")
     with open(fname, "rb") as f:

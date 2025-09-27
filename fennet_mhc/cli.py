@@ -53,7 +53,7 @@ def check():
     "--out-folder",
     type=click.Path(),
     required=True,
-    help="Folder path to save hla_embeddings.pkl.",
+    help="Folder path to save mhc_embeddings.pkl.",
 )
 @click.option(
     "--device",
@@ -105,12 +105,19 @@ def embed_proteins(fasta, out_folder, device):
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
+@click.option(
+    "--use-pseudo",
+    default=False,
+    required=False,
+    help="If use pseudo (netMHCpan) sequences for MHC embedding.",
+)
 def embed_peptides(
     peptide_file,
     out_folder,
     min_peptide_length,
     max_peptide_length,
     device,
+    use_pseudo,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
@@ -119,7 +126,8 @@ def embed_peptides(
         out_folder,
         min_peptide_length,
         max_peptide_length,
-        device,
+        device=device,
+        use_pseudo=use_pseudo,
     )
 
 
@@ -174,8 +182,8 @@ def embed_peptides(
     default=None,
     required=False,
     help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
-    "If None, a default embeddings file cotaining 15672 alleles is provided. "
-    "If your desired alleles are not included in the default file, ",
+    "If None, a default embedding .pkl file will be used. "
+    "If your desired alleles are not included in the default file",
 )
 @click.option(
     "--device",
@@ -183,6 +191,12 @@ def embed_peptides(
     default="cuda",
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+)
+@click.option(
+    "--use-pseudo",
+    default=False,
+    required=False,
+    help="If use pseudo (netMHCpan) sequences for MHC embedding.",
 )
 def predict_epitopes_for_mhc(
     peptide_file,
@@ -194,6 +208,7 @@ def predict_epitopes_for_mhc(
     outlier_distance,
     hla_file,
     device,
+    use_pseudo,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
@@ -207,7 +222,8 @@ def predict_epitopes_for_mhc(
         max_peptide_length,
         outlier_distance,
         hla_file,
-        device,
+        device=device,
+        use_pseudo=use_pseudo,
     )
 
 
@@ -251,9 +267,9 @@ def predict_epitopes_for_mhc(
     "--hla-file",
     default=None,
     help="Path to the pre-computed MHC protein embeddings file (.pkl). "
-    "If None, a default embeddings file will be used. "
+    "If None, a default embedding file will be used. "
     "If your desired alleles are not included in the default file, "
-    "you can generate a custom embeddings file using the *embed_proteins* command.",
+    "you can generate a custom embedding file using the *embed_proteins* command.",
 )
 @click.option(
     "--device",
@@ -261,6 +277,12 @@ def predict_epitopes_for_mhc(
     default="cuda",
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
+)
+@click.option(
+    "--use-pseudo",
+    default=False,
+    required=False,
+    help="If use pseudo (netMHCpan) sequences for MHC embedding.",
 )
 def predict_mhc_binders_for_epitopes(
     peptide_file,
@@ -270,6 +292,7 @@ def predict_mhc_binders_for_epitopes(
     outlier_distance,
     hla_file,
     device,
+    use_pseudo,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
@@ -280,7 +303,8 @@ def predict_mhc_binders_for_epitopes(
         max_peptide_length,
         outlier_distance,
         hla_file,
-        device,
+        device=device,
+        use_pseudo=use_pseudo,
     )
 
 
@@ -298,7 +322,8 @@ def predict_mhc_binders_for_epitopes(
     type=int,
     default=8,
     show_default=True,
-    help="Number of kmeans centroids to cluster. It's better to add 1-2 to the number you expect, otherwise; some outliers may affect the clustering.",
+    help="Number of kmeans centroids to cluster. It's better to add 1-2 to "
+    "the number you expect, otherwise; some outliers may affect the clustering.",
 )
 @click.option(
     "--out-folder",
@@ -325,7 +350,7 @@ def predict_mhc_binders_for_epitopes(
     default=None,
     required=False,
     help="Path to the fasta file or pre-computed MHC protein embeddings file (.pkl) or fasta file. "
-    "If None, a default embeddings file cotaining 15672 alleles is provided. "
+    "If None, a default embedding pkl file will be used. "
     "If your desired alleles are not included in the default file, ",
 )
 @click.option(
@@ -335,6 +360,12 @@ def predict_mhc_binders_for_epitopes(
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
+@click.option(
+    "--use-pseudo",
+    default=False,
+    required=False,
+    help="If use pseudo (netMHCpan) sequences for MHC embedding.",
+)
 def deconvolute_peptides(
     peptide_file,
     n_centroids,
@@ -343,6 +374,7 @@ def deconvolute_peptides(
     max_peptide_length,
     hla_file,
     device,
+    use_pseudo,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
@@ -355,6 +387,7 @@ def deconvolute_peptides(
         outlier_distance=100,  # no distance refinement
         hla_file_path=hla_file,
         device=device,
+        use_pseudo=use_pseudo,
     )
 
 
@@ -377,7 +410,8 @@ def deconvolute_peptides(
     type=int,
     default=8,
     show_default=True,
-    help="Number of kmeans centroids to cluster. It's better to add 1-2 to the number you expect, otherwise; some outliers may affect the clustering.",
+    help="Number of kmeans centroids to cluster. It's better to add 1-2 to "
+    "the number you expect, otherwise; some outliers may affect the clustering.",
 )
 @click.option(
     "--out-folder",
@@ -424,6 +458,12 @@ def deconvolute_peptides(
     show_default=True,
     help="Device to use. Options: 'cpu', 'cuda' (for NVIDIA GPUs), or 'mps' (for Apple Silicon GPUs).",
 )
+@click.option(
+    "--use-pseudo",
+    default=False,
+    required=False,
+    help="If use pseudo (netMHCpan) sequences for MHC embedding.",
+)
 def deconvolute_and_predict_peptides(
     peptide_file_to_deconv,
     peptide_file_to_predict,
@@ -435,6 +475,7 @@ def deconvolute_and_predict_peptides(
     outlier_distance,
     hla_file,
     device,
+    use_pseudo,
 ):
     import fennet_mhc.pipeline_api as pipeline_api
 
@@ -449,6 +490,7 @@ def deconvolute_and_predict_peptides(
         outlier_distance,
         hla_file,
         device,
+        use_pseudo=use_pseudo,
     )
 
 

@@ -8,4 +8,4 @@ click
 faiss-cpu
 logomaker
 plotly
-umap
+umap-learn
