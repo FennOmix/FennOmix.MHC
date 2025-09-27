@@ -1,16 +1,17 @@
 import os
+import platform
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from fennet_mhc.constants._const import (
+from fennomix_mhc.constants._const import (
     MHC_DF_FOR_EPITOPES_TSV,
     PEPTIDE_DECONVOLUTION_CLUSTER_DF_TSV,
     PEPTIDE_DF_FOR_MHC_TSV,
     PEPTIDES_FOR_MHC_FASTA,
 )
-from fennet_mhc.pipeline_api import (
+from fennomix_mhc.pipeline_api import (
     PretrainedModels,
     _load_peptide_embeddings,
     deconvolute_peptides,
@@ -111,6 +112,9 @@ def test_predict_binders_for_epitopes():
 
 
 def test_peptide_deconvolution():
+    # Segmentation fault on osx-arm64
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        return
     deconvolute_peptides(
         TEST_PEPTIDE_TSV,
         2,

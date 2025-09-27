@@ -3,13 +3,13 @@ import os
 import numpy as np
 import pandas as pd
 
-from fennet_mhc.constants._const import (
+from fennomix_mhc.constants._const import (
     D_MODEL,
     MHC_DF_FOR_EPITOPES_TSV,
     PEPTIDE_DF_FOR_MHC_TSV,
     PEPTIDES_FOR_MHC_FASTA,
 )
-from fennet_mhc.pipeline_api import (
+from fennomix_mhc.pipeline_api import (
     PretrainedModels,
     predict_epitopes_for_mhc,
     predict_mhc_binders_for_epitopes,

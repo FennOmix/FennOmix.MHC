@@ -1,4 +1,4 @@
-from fennet_mhc import __github__, __license__, __version__
+from fennomix_mhc import __github__, __license__, __version__
 
 
 def test_package_metadata():

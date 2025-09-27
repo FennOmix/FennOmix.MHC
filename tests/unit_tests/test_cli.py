@@ -2,7 +2,7 @@
 
 # from click.testing import CliRunner
 
-# from fennet_mhc import cli
+# from fennomix_mhc import cli
 
 # TEST_PEPTIDE_TSV = os.path.abspath("./test_data/test_peptides.tsv")
 # TEST_MHC_FASTA = os.path.abspath("./test_data/test_MHC_proteins.fasta")
