@@ -1,0 +1,11 @@
+# Dependencies required for building alphaDIA documentation.
+sphinx-rtd-theme
+nbsphinx
+myst_parser
+sphinx_design
+furo
+pandoc
+autodocsumm
+sphinx
+jinja2
+contextfilter
