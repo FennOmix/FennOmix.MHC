@@ -11,11 +11,6 @@
 - Peptide clustering analysis.
 - HLA clustering analysis.
 
-:::{admonition} Predicted libraries with Bruker .d data
-:class: warning
-Alltough search is possible, alphaDIA's feature-free search takes a long time with fully predicted libraries. We are still evaluating how to better support fully predicted libraries.
-:::
-
 **Cite FennOmix.MHC**
 > **Building FennOmix-MHC for peptide-HLA representation learning and shared epitope discovery**<br>
 
