@@ -9,3 +9,4 @@ autodocsumm
 sphinx
 jinja2
 contextfilter
+sphinx-autodoc-typehints

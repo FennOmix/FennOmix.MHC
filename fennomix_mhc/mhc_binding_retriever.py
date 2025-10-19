@@ -21,15 +21,26 @@ def get_fdrs(
 ) -> np.ndarray:
     """Calculate FDRs using the target-decoy approach.
 
+    This function computes False Discovery Rates (FDRs) for target distances by comparing them
+    against decoy distances. It uses a simple counting method based on rank comparison.
+
     Args:
-        dists: Distances between target embeddings.
-        rnd_dists: Distances for decoy embeddings.
-        alpha: Scaling factor defined as ``len(targets) / len(decoys)``.
-        remove_rnd_top_rank: Fraction of the lowest decoy distances to ignore
-            when computing FDRs.
+        dists: 1D array of target distances between peptide and MHC embeddings.
+            Shape: (n_targets,)
+        rnd_dists: 1D array of decoy distances used for FDR estimation.
+            Shape: (n_decoys,)
+        alpha: Ratio of number of targets to decoys, i.e., len(dists) / len(rnd_dists).
+        remove_rnd_top_rank: Fraction of lowest-ranked decoy values to exclude as "binders"
+            when estimating FDR (default: 0.01).
 
     Returns:
-        Array of FDR values for each element in ``dists``.
+        fdrs: Array of FDR values corresponding to each entry in `dists`, unsorted.
+              Shape: (n_targets,)
+
+    Example:
+        >>> targets = np.array([0.3, 0.5, 0.7])
+        >>> decoys = np.random.normal(1.0, 0.2, size=1000)
+        >>> fdrs = get_fdrs(targets, decoys, alpha=1.0)
     """
     sorted_idxes = np.argsort(dists)
     sorted_rnd = np.argsort(rnd_dists)
@@ -50,14 +61,25 @@ def get_fdrs(
 
 @numba.njit
 def get_q_values(fdrs: np.ndarray, distances: np.ndarray) -> np.ndarray:
-    """Convert FDRs to q-values.
+    """Convert FDR estimates into q-values via monotonic minimization.
+
+    Q-values are computed by enforcing that they are non-decreasing with increasing distance,
+    ensuring proper multiple testing correction.
 
     Args:
-        fdrs: Array of FDR values.
-        distances: Distances used for ranking.
+        fdrs: Input array of FDR values (not necessarily monotonic).
+            Shape: (n_samples,)
+        distances: Distance values used to sort peptides; larger distances mean weaker binding.
+            Used to reverse-sort for q-value computation.
+            Shape: (n_samples,)
 
     Returns:
-        Array of q-values sorted according to ``distances``.
+        qvals: Monotonic q-values, same shape as input.
+               Values are adjusted so that q[i] <= q[j] for all j < i in ranking order.
+               Shape: (n_samples,)
+
+    Note:
+        The algorithm traverses from highest to lowest distance, maintaining minimum seen FDR.
     """
     sorted_idxes = np.argsort(distances)[::-1]
     min_pep = 100000.0
@@ -77,22 +99,28 @@ def get_binding_fdrs(
     outlier_threshold: float = 0.01,
     fmm_fdr: bool = False,
 ) -> np.ndarray:
-    """Estimate FDRs for a set of distances.
+    """Estimate FDRs for peptide-MHC binding distances using either TDA or FMM.
 
-    This function can either perform a simple target-decoy FDR estimation or use
-    a finite mixture model (FMM) when ``fmm_fdr`` is ``True``.
+    Supports two modes:
+      - Target-Decoy Analysis (TDA): Simple empirical FDR.
+      - Finite Mixture Model (FMM): Probabilistic modeling of binders vs. non-binders.
 
     Args:
-        distances_1D: Target distance values.
-        decoys_1D: Decoy distance values.
-        max_fitting_samples: Maximum number of target samples used for fitting
-            the FMM.
-        random_state: Random seed used when subsampling ``distances_1D``.
-        outlier_threshold: Fraction of decoys ignored as outliers.
-        fmm_fdr: Whether to estimate FDR using an FMM model.
+        distances_1D: Observed distances for real peptides.
+            Shape: (n_peptides,)
+        decoys_1D: Distances for randomly generated decoy peptides.
+            Shape: (n_decoys,)
+        max_fitting_samples: Maximum number of samples to use in FMM fitting if dataset is large.
+        random_state: Random seed for reproducibility during subsampling.
+        outlier_threshold: Fraction of smallest decoy distances to ignore as strong binders.
+        fmm_fdr: If True, use FMM-based FDR estimation; otherwise use standard TDA.
 
     Returns:
-        Array of FDR values corresponding to ``distances_1D``.
+        fdrs: Estimated FDR for each peptide in `distances_1D`.
+              Shape: (n_peptides,)
+
+    Raises:
+        ValueError: If `decoys_1D` is empty or invalid.
     """
     if fmm_fdr:
         decoy_fmm = DecoyModel(gaussian_outlier_sigma=outlier_threshold)
@@ -131,17 +159,28 @@ def get_binding_fdr_for_best_allele(
     outlier_threshold: float = 0.01,
     fmm_fdr: bool = False,
 ) -> np.ndarray:
-    """Calculate FDRs for the best allele of each peptide.
+    """Compute FDRs for the best-binding allele per peptide.
+
+    For each peptide, finds the allele with minimum distance and calculates its FDR
+    independently across alleles using decoy distributions.
 
     Args:
-        distances: Matrix of distances with shape ``(n_peptides, n_alleles)``.
-        rnd_dist: Sorted decoy distance matrix with the same second dimension as
-            ``distances``.
-        outlier_threshold: Fraction of decoys ignored when estimating FDR.
-        fmm_fdr: Whether to use the FMM based FDR estimation.
+        distances: Distance matrix between peptides and alleles.
+            Shape: (n_peptides, n_alleles)
+        rnd_dist: Sorted decoy distance matrix (precomputed), one column per allele.
+            Should be pre-sorted along axis 0.
+            Shape: (n_decoys, n_alleles)
+        outlier_threshold: Fraction of top decoys to treat as true binders (ignored in FDR).
+        fmm_fdr: Whether to use FMM-based FDR instead of basic TDA.
 
     Returns:
-        Array of FDR values for the best allele of each peptide.
+        best_allele_fdrs: FDR value for the best allele of each peptide.
+                          Shape: (n_peptides,)
+
+    Example:
+        >>> dists = np.random.rand(100, 6).astype(np.float32)
+        >>> decoy_dists = np.sort(np.random.rand(1000, 6), axis=0)
+        >>> fdrs = get_binding_fdr_for_best_allele(dists, decoy_dists)
     """
     best_allele_idxes = np.argmin(distances, axis=1)
     min_allele_distances = distances[
@@ -165,16 +204,28 @@ def get_binding_fdr_for_best_allele(
 
 @numba.njit
 def get_binding_ranks(distances: np.ndarray, sorted_rnd_dist: np.ndarray) -> np.ndarray:
-    """Rank each peptide against a decoy distribution.
+    """Compute FDRs for the best-binding allele per peptide.
+
+    For each peptide, finds the allele with minimum distance and calculates its FDR
+    independently across alleles using decoy distributions.
 
     Args:
-        distances: Distance matrix of shape ``(n_peptides, n_alleles)``.
-        sorted_rnd_dist: Sorted decoy distance matrix of the same shape as
-            ``distances``.
+        distances: Distance matrix between peptides and alleles.
+            Shape: (n_peptides, n_alleles)
+        rnd_dist: Sorted decoy distance matrix (precomputed), one column per allele.
+            Should be pre-sorted along axis 0.
+            Shape: (n_decoys, n_alleles)
+        outlier_threshold: Fraction of top decoys to treat as true binders (ignored in FDR).
+        fmm_fdr: Whether to use FMM-based FDR instead of basic TDA.
 
     Returns:
-        Array containing the percentile rank of the best allele distance for
-        each peptide.
+        best_allele_fdrs: FDR value for the best allele of each peptide.
+                          Shape: (n_peptides,)
+
+    Example:
+        >>> dists = np.random.rand(100, 6).astype(np.float32)
+        >>> decoy_dists = np.sort(np.random.rand(1000, 6), axis=0)
+        >>> fdrs = get_binding_fdr_for_best_allele(dists, decoy_dists)
     """
     best_allele_idxes = np.argmin(distances, axis=1)
     best_allele_ranks = np.zeros(len(best_allele_idxes))
@@ -186,6 +237,25 @@ def get_binding_ranks(distances: np.ndarray, sorted_rnd_dist: np.ndarray) -> np.
 
 
 class MHCBindingRetriever:
+    """A retriever class to compute peptide-MHC binding metrics including distance, rank, and FDR.
+
+    This class wraps trained encoders for peptides and HLAs, enabling fast retrieval of binding
+    predictions through embedding space distance. It supports both single-peptide queries and
+    genome-wide screening against self-proteins.
+
+    Attributes:
+        hla_encoder: Trained neural network model for encoding HLA sequences.
+        pept_encoder: Trained neural network model for encoding peptide sequences.
+        device (torch.device): Computation device (e.g., 'cuda' or 'cpu').
+        dataset (HlaDataSet): Dataset handler containing protein digestion and HLA info.
+        hla_embeds (np.ndarray): Precomputed HLA embeddings. Shape: (n_alleles, d_model)
+        n_decoy_samples (int): Number of random decoy peptides to generate for FDR estimation.
+        outlier_threshold (float): Fraction of strongest decoy binders to exclude.
+        use_fmm_fdr (bool): Whether to use finite mixture model for FDR calculation.
+        decoy_rnd_seed (int): Seed for reproducible decoy generation.
+        d_model (int): Embedding dimension size.
+        verbose (bool): Enable progress bars and logging.
+    """
     def __init__(
         self,
         hla_encoder,
@@ -197,17 +267,20 @@ class MHCBindingRetriever:
         max_peptide_len: int = 14,
         device: str = "cuda",
     ) -> None:
-        """Create a retriever for peptide--MHC binding metrics.
+        """Initialize the MHCBindingRetriever.
 
         Args:
-            hla_encoder: Trained HLA encoder model.
-            pept_encoder: Trained peptide encoder model.
-            hla_df: DataFrame describing the HLA alleles.
-            hla_embeds: Pre-computed embeddings for each allele in ``hla_df``.
-            protein_data: Protein sequences used to generate decoy peptides.
-            min_peptide_len: Minimum peptide length used for digestion.
-            max_peptide_len: Maximum peptide length used for digestion.
-            device: Torch device string used for computations.
+            hla_encoder: Model to encode HLA alleles into fixed-length vectors.
+            pept_encoder: Model to encode peptides into fixed-length vectors.
+            hla_df: DataFrame containing HLA allele metadata (e.g., names, sequences).
+            hla_embeds: Precomputed embeddings for all HLA alleles. Shape: (n_alleles, d_model)
+            protein_data: Protein sequences used for generating decoy/non-self peptides.
+            min_peptide_len: Minimum length for digested peptides (default: 8).
+            max_peptide_len: Maximum length for digested peptides (default: 14).
+            device: Torch device identifier ('cuda', 'cpu', etc.). Auto-detected if needed.
+
+        Raises:
+            ValueError: If `hla_embeds` has incorrect dimensions or incompatible encoder types.
         """
         self.hla_encoder = hla_encoder
         self.pept_encoder = pept_encoder
@@ -233,16 +306,22 @@ class MHCBindingRetriever:
     def get_embedding_distances(
         self, prot_embeds: np.ndarray, pept_embeds: np.ndarray, batch_size=1000000
     ) -> np.ndarray:
-        """Compute Euclidean distances between peptide and allele embeddings.
+        """Compute pairwise Euclidean distances between protein and peptide embeddings.
+
+        Uses `torch.cdist` for efficient batched computation on GPU.
 
         Args:
-            prot_embeds: Array of allele embeddings of shape ``(n_alleles, d)``.
-            pept_embeds: Array of peptide embeddings of shape ``(n_peptides, d)``.
-            batch_size: Number of peptides processed per batch when computing
-                pairwise distances.
+            prot_embeds: Embeddings for MHC alleles. Shape: (n_alleles, d_model)
+            pept_embeds: Embeddings for peptides. Shape: (n_peptides, d_model)
+            batch_size: Number of peptides processed per batch to avoid memory overflow.
 
         Returns:
-            Distance matrix with shape ``(n_peptides, n_alleles)``.
+            dist_matrix: Pairwise distance matrix. Shape: (n_peptides, n_alleles)
+
+        Example:
+            >>> prot_emb = np.random.rand(6, 480).astype(np.float32)
+            >>> pept_emb = np.random.rand(100, 480).astype(np.float32)
+            >>> dists = retriever.get_embedding_distances(prot_emb, pept_emb)
         """
         ret_dists = np.zeros((len(pept_embeds), len(prot_embeds)), dtype=np.float32)
         prot_embeds = torch.tensor(prot_embeds, device=self.device)
@@ -268,16 +347,16 @@ class MHCBindingRetriever:
         cdist_batch_size: int = 1000000,
         embed_batch_size: int = 1024,
     ) -> np.ndarray:
-        """Embed peptides and compute distances to allele embeddings.
+        """Embed peptides and compute their distances to given MHC allele embeddings.
 
         Args:
-            prot_embeds: Allele embeddings.
-            peptide_list: Iterable of peptide sequences.
-            cdist_batch_size: Batch size used when computing pairwise distances.
-            embed_batch_size: Batch size used when embedding peptides.
+            prot_embeds: Precomputed MHC embeddings. Shape: (n_alleles, d_model)
+            peptide_list: List or array of peptide sequences (strings).
+            cdist_batch_size: Batch size for distance computation.
+            embed_batch_size: Batch size for peptide embedding.
 
         Returns:
-            Distance matrix with shape ``(n_peptides, n_alleles)``.
+            dist_matrix: Distance from each peptide to each allele. Shape: (n_peptides, n_alleles)
         """
         if isinstance(peptide_list, np.ndarray):
             peptide_list = peptide_list.astype("U")
@@ -297,7 +376,16 @@ class MHCBindingRetriever:
         )
 
     def _get_decoy_distances(self, prot_embeds):
-        """Generate random peptides and compute their distances to alleles."""
+        """Generate decoy peptides and compute their sorted distances to alleles.
+
+        Used for FDR/rank estimation.
+
+        Args:
+            prot_embeds: MHC embeddings for scoring. Shape: (n_alleles, d_model)
+
+        Returns:
+            sorted_decoy_dists: Sorted distances of decoy peptides. Shape: (n_decoys, n_alleles)
+        """
         np.random.seed(self.decoy_rnd_seed)
         rnd_pept_df = self.dataset.digest.get_random_pept_df(self.n_decoy_samples)
 
@@ -312,19 +400,19 @@ class MHCBindingRetriever:
         peptide_list,
         keep_not_best_alleles: bool = False,
     ) -> pd.DataFrame:
-        """Return binding metrics for a set of peptides.
+        """Compute binding metrics for a list of peptides given their sequences or embeddings.
 
         Args:
-            prot_embeds: Allele embedding matrix.
-            peptide_list: Iterable of peptide sequences or precomputed peptide
-                embeddings.
-            keep_not_best_alleles: If ``True`` also return the full distance
-                matrix for each peptide.
+            prot_embeds: Allele embeddings. Shape: (n_alleles, d_model)
+            peptide_list: Either a list of peptide sequences or a numpy array of embeddings.
+            keep_not_best_alleles: If True, include full distance matrix in output.
 
         Returns:
-            DataFrame with columns ``best_allele_id``, ``best_allele_dist`` and
-            ``best_allele_rank``. If ``peptide_list`` consists of sequences the
-            ``sequence`` column is also included.
+            df: DataFrame with columns:
+                - sequence (if input was sequences)
+                - best_allele_id: Index of best-matching allele
+                - best_allele_dist: Minimum distance
+                - best_allele_rank: Percentile rank among decoys (0–100)
         """
         if len(prot_embeds.shape) == 1:
             prot_embeds = prot_embeds[None, :]
@@ -377,19 +465,18 @@ class MHCBindingRetriever:
         embed_batch_size: int = 1024,
         get_sequence: bool = True,
     ) -> pd.DataFrame:
-        """Screen the internal protein database for potential binders.
+        """Screen internal proteome for potential self-reactive binders.
 
         Args:
-            alleles: List of allele names to consider.
-            dist_threshold: Distance cut-off for reporting peptides.
-            fdr: Maximum FDR allowed for reported peptides.
-            cdist_batch_size: Batch size used when computing pairwise distances.
-            embed_batch_size: Batch size used when embedding peptides.
-            get_sequence: If ``True`` return peptide sequences, otherwise return
-                peptide indices.
+            alleles: List of HLA allele names to consider.
+            dist_threshold: Maximum allowed embedding distance.
+            fdr: Maximum allowed false discovery rate.
+            cdist_batch_size: Batch size for distance computation.
+            embed_batch_size: Batch size for embedding peptides.
+            get_sequence: If True, return actual sequences; else return indices.
 
         Returns:
-            DataFrame of peptides passing the specified thresholds.
+            df: DataFrame of qualifying peptides with binding metrics and optionally sequences.
         """
         selected_embeds = self.hla_embeds[
             [self.dataset.allele_idxes_dict[allele][0] for allele in alleles]
@@ -467,16 +554,15 @@ class MHCBindingRetriever:
         peptide_list,
         keep_not_best_alleles: bool = False,
     ) -> pd.DataFrame:
-        """Calculate binding metrics for the provided peptide list.
+        """Score a list of peptides against specified HLA alleles.
 
         Args:
-            alleles: List of allele names to score against.
-            peptide_list: Iterable of peptide sequences.
-            keep_not_best_alleles: If ``True`` also keep the full distance matrix
-                for each allele.
+            alleles: Names of HLA alleles to evaluate.
+            peptide_list: List of peptide sequences.
+            keep_not_best_alleles: Whether to retain scores for all alleles.
 
         Returns:
-            DataFrame with binding metrics for each peptide.
+            df: Binding metrics with added `best_allele` column mapping ID to name.
         """
         selected_embeds = self.hla_embeds[
             [self.dataset.allele_idxes_dict[allele][0] for allele in alleles]

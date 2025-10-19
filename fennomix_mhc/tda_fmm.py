@@ -3,16 +3,33 @@ import numpy as np
 from scipy.stats import gamma as dgamma
 
 
-## Calculate gaussian density function values for np.array X.
-#
-# @param X The input np.array.
-# @param u The mean of the score X, i.e. the mu
-# @param sigma The std of the score X, i.e. the sigma
 def gauss_pdf(X, u, sigma):
+    """Calculate Gaussian probability density function values for input array X.
+
+    Args:
+        X: Input array of shape (n,) representing scores.
+        u: Mean (mu) of the Gaussian distribution.
+        sigma: Standard deviation (sigma) of the Gaussian distribution.
+
+    Returns:
+        Array of PDF values with same shape as X.
+    """
     return 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-0.5 * np.square((X - u) / sigma))
 
 
 def gamma_pdf(X, u, sigma):
+    """Calculate Gamma probability density function values using mean and std.
+
+    The shape and scale parameters are derived from mean (u) and std (sigma).
+
+    Args:
+        X: Input array of shape (n,) representing scores.
+        u: Mean of the distribution.
+        sigma: Standard deviation of the distribution.
+
+    Returns:
+        Array of Gamma PDF values with same shape as X.
+    """
     a = (u / sigma) ** 2
     scale = sigma**2 / u
     return dgamma.pdf(X, a=a, scale=scale)
@@ -23,18 +40,31 @@ Div_Zero = 1e-50
 Max_Iter = 30
 
 
-## Implementation of the FMM algorithm.
-#
-# This model could be both used to estimate both target and decoy score distributions.
 class TDA_fmm:
-    ## The constructor.
-    #
-    # @param n_components The number of components of the gaussian mixtures.
-    # @param max_iter Max number of iterations.
-    # @param external_model External TDA_FMM model appended to the components
-    # If estimating the decoy model, external_model should be set as None.
-    # If estimating the target model, external_model should be a decoy model which has been fit()ed.
+    """Finite Mixture Model (FMM) for Target-Decoy Analysis (TDA).
+
+    This class estimates score distributions using a mixture of Gaussians.
+    It supports modeling both target and decoy distributions, where the decoy
+    model can be incorporated as an external component in the target model.
+
+    Attributes:
+        n_components: Number of Gaussian components in the mixture.
+        external_model: Optional fitted decoy model (for target modeling).
+        max_iter: Maximum number of EM iterations.
+        main_pdf: PDF function used for the first component.
+        helper_pdf: PDF function used for other components.
+        weights: Learned mixture weights (pi_k).
+        mu: Learned means for each component.
+        sigma: Learned standard deviations for each component.
+    """
     def __init__(self, n_components, external_model=None):
+        """Initializes the TDA_fmm model.
+
+        Args:
+            n_components: Number of Gaussian components in the mixture.
+            external_model: Pre-fitted decoy model. If None, models decoy;
+                           if provided, models target with decoy as a component.
+        """
         self.n_components = n_components
         self.external_model = external_model
         self.max_iter = Max_Iter
@@ -47,8 +77,19 @@ class TDA_fmm:
     def __call__(self, X):
         return self.pdf_mix(X)
 
-    ## Estimate posterior error probabilities.
     def pep(self, X, external_pdf=None):
+        """Estimates Posterior Error Probabilities (PEP).
+
+        PEP = pi0 * f_decoy(x) / f_mixture(x)
+
+        Args:
+            X: Input scores.
+            external_pdf: Optional precomputed PDF values from external model.
+                          If None and external_model exists, it will be computed.
+
+        Returns:
+            Array of PEP values for each score in X. Returns zeros if model not fitted.
+        """
         if self.weights is None or self.external_model is None:
             return np.zeros(len(X))
         if external_pdf is None:
@@ -56,13 +97,25 @@ class TDA_fmm:
         return self.weights[-1] * external_pdf / self.pdf_mix(X, external_pdf)
 
     def get_pi0(self):
+        """Returns the estimated proportion of decoy (null) components in the mixture.
+
+        Returns:
+            pi0 value (between 0 and 1). Returns 0 if model not fitted or no external model.
+        """
         if self.weights is None or self.external_model is None:
             return 0
         else:
             return self.weights[-1]
 
-    ## Estimate the f1 probability density function (pdf) values for given X.
     def pdf(self, X):
+        """Computes the PDF of the main mixture components (excluding external model).
+
+        Args:
+            X: Input scores of shape (n,).
+
+        Returns:
+            PDF values of shape (n,). Returns zeros if model not fitted.
+        """
         if self.weights is None:
             return np.zeros(len(X))
         X = np.array(X)
@@ -74,8 +127,18 @@ class TDA_fmm:
                 pdf[i, :] = self.helper_pdf(X, u=self.mu[i], sigma=self.sigma[i])
         return np.dot(self.weights[: self.n_components], pdf)
 
-    ## Estimate mixed probability density function (pdf) values for given X.
     def pdf_mix(self, X, external_pdf=None):
+        """Computes the full mixture PDF, including external model if present.
+
+        f_mixture(x) = pi0 * f_decoy(x) + (1-pi0) * f_target(x)
+
+        Args:
+            X: Input scores.
+            external_pdf: Optional precomputed PDF values from external model.
+
+        Returns:
+            Mixture PDF values. Returns zeros if model not fitted.
+        """
         if self.weights is None:
             return np.zeros(len(X))
         X = np.array(X)
@@ -88,8 +151,17 @@ class TDA_fmm:
         else:
             return self.pdf(X)
 
-    ## Calculate the log-likelihood and BIC value given X.
     def loglik_BIC(self, X):
+        """Computes log-likelihood and Bayesian Information Criterion (BIC).
+
+        BIC = -2 * loglik + num_params * log(n)
+
+        Args:
+            X: Input scores.
+
+        Returns:
+            A tuple of (log-likelihood, BIC). Returns (0, 0) if model not fitted.
+        """
         if self.weights is None:
             return 0, 0
         _has_external = 1 if self.external_model is not None else 0
@@ -97,8 +169,21 @@ class TDA_fmm:
         BIC = -2 * loglik + (self.n_components + _has_external) * np.log(len(X))
         return loglik, BIC
 
-    ## Plot the mixture models
     def plot(self, title, plot_scores, false_scores=None):
+        """Plots the fitted mixture model against histogram of scores.
+
+        If an external model exists and false_scores are provided, plots:
+          - Decoy model (external)
+          - Target histogram + mixture fit
+          - Separated true and false components
+
+        Otherwise, plots only the decoy model fit.
+
+        Args:
+            title: Title prefix for plots.
+            plot_scores: Scores to plot (e.g., target scores).
+            false_scores: Optional decoy scores for comparison.
+        """
         binsize = 40
         lw = 1
 
@@ -153,8 +238,12 @@ class TDA_fmm:
             pp.plot(bins, dis, "r--", linewidth=lw)
             pp.set_title(title + " decoy")
 
-    ## Fit the FMM model given data X.
     def fit(self, X):
+        """Fits the FMM model using Expectation-Maximization (EM) algorithm.
+
+        Args:
+            X: Input scores to fit the model on.
+        """
         if len(X) < 10:
             self.weights = None
             return
@@ -236,12 +325,30 @@ class TDA_fmm:
 
 
 class DecoyModel(TDA_fmm):
+    """A simplified model for fitting decoy score distributions.
+
+    Uses a single Gaussian, optionally filtering outliers using sigma threshold.
+    """
     def __init__(self, gaussian_outlier_sigma, *args, **kwargs):
+        """Initializes the decoy model.
+
+        Args:
+            gaussian_outlier_sigma: If provided, scores below (mu - sigma * gaussian_outlier_sigma)
+                                    are filtered before fitting.
+            *args, **kwargs: Ignored, for compatibility.
+        """
         self.external_model = None
         self.weights = np.array([1.0])
         self.gaussian_outlier_sigma = gaussian_outlier_sigma
 
     def fit(self, X):
+        """Fits a single Gaussian to the decoy scores.
+
+        Optionally filters left-tail outliers before fitting.
+
+        Args:
+            X: Decoy scores.
+        """
         self.mu = np.mean(X)
         self.sigma = np.std(X)
 
@@ -251,12 +358,32 @@ class DecoyModel(TDA_fmm):
             self.sigma = np.std(X)
 
     def pdf(self, X):
+        """Computes Gaussian PDF for given scores.
+
+        Args:
+            X: Input scores.
+
+        Returns:
+            PDF values.
+        """
         self.data = X
         return gauss_pdf(X, self.mu, self.sigma)
 
 
-## Select best TDA_FMM (i.e. estimate the best n_components of mixture models).
 def select_best_fmm(target_scores, decoy_fmm, _max_component_=3, verbose=True):
+    """Selects the best TDA_fmm model by BIC criterion.
+
+    Fits models with 1 to `_max_component_` components and selects the one with lowest BIC.
+
+    Args:
+        target_scores: Scores to fit the target model on.
+        decoy_fmm: Pre-fitted decoy model.
+        _max_component_: Maximum number of components to try.
+        verbose: Whether to print progress.
+
+    Returns:
+        Best-fitted TDA_fmm model (target model).
+    """
     best_target_BIC = BIC_Max
     for n_component in range(1, _max_component_ + 1):
         target_fmm = TDA_fmm(n_component, external_model=decoy_fmm)
