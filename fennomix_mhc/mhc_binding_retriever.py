@@ -256,6 +256,7 @@ class MHCBindingRetriever:
         d_model (int): Embedding dimension size.
         verbose (bool): Enable progress bars and logging.
     """
+
     def __init__(
         self,
         hla_encoder,

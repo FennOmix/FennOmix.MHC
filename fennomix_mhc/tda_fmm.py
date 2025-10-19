@@ -57,6 +57,7 @@ class TDA_fmm:
         mu: Learned means for each component.
         sigma: Learned standard deviations for each component.
     """
+
     def __init__(self, n_components, external_model=None):
         """Initializes the TDA_fmm model.
 
@@ -329,6 +330,7 @@ class DecoyModel(TDA_fmm):
 
     Uses a single Gaussian, optionally filtering outliers using sigma threshold.
     """
+
     def __init__(self, gaussian_outlier_sigma, *args, **kwargs):
         """Initializes the decoy model.
 

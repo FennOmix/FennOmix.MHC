@@ -340,6 +340,7 @@ class SiameseCELoss:
     Encourages the model to bring positive pairs closer and push negative pairs apart.
     Uses margin-based contrastive loss.
     """
+
     margin: float = 1
 
     def get_loss(
