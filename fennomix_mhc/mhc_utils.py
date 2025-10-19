@@ -34,7 +34,8 @@ def load_peptide_df_from_mixmhcpred(mixmhcpred_dir: str, rank: int = 2) -> pd.Da
     """
     df_list: list[pd.DataFrame] = []
     for fname in os.listdir(mixmhcpred_dir):
-        df = pd.read_table(os.path.join(mixmhcpred_dir, fname), skiprows=11)
+        fpath: str = os.path.join(mixmhcpred_dir, fname)
+        df: pd.DataFrame = pd.read_table(fpath, skiprows=11)
         df = df.query(f"`%Rank_bestAllele`<={rank}").copy()
         df["sequence"] = df["Peptide"]
         df = df[["sequence"]]
@@ -48,7 +49,7 @@ class NonSpecificDigest:
 
     def __init__(
         self,
-        protein_data: pd.DataFrame | list[str] | str,
+        protein_data: pd.DataFrame | str | list[str],
         min_peptide_len: int = 8,
         max_peptide_len: int = 14,
     ) -> None:
@@ -71,18 +72,35 @@ class NonSpecificDigest:
             ValueError: If `min_peptide_len` > `max_peptide_len`, or if no sequences are found.
             TypeError: If `protein_data` is not a DataFrame, string, or list of strings.
         """
+        if not isinstance(protein_data, (pd.DataFrame | str | list)):
+            raise TypeError(
+                "protein_data must be a DataFrame, string, or list of strings"
+            )
 
         if isinstance(protein_data, pd.DataFrame):
-            self.cat_protein_sequence = (
+            if "sequence" not in protein_data.columns:
+                raise ValueError("DataFrame must contain a 'sequence' column")
+            self.cat_protein_sequence: str = (
                 "$" + "$".join(protein_data.sequence.values) + "$"
             )
         else:
             if isinstance(protein_data, str):
-                protein_data = [protein_data]
-            protein_dict = load_all_proteins(protein_data)
+                protein_paths: list[str] = [protein_data]
+            else:
+                protein_paths = protein_data
+            protein_dict: dict[str, dict[str, str]] = load_all_proteins(protein_paths)
+            if not protein_dict:
+                raise ValueError(
+                    "No protein sequences found in the provided FASTA files."
+                )
             self.cat_protein_sequence = (
-                "$" + "$".join([_["sequence"] for _ in protein_dict.values()]) + "$"
+                "$"
+                + "$".join([prot["sequence"] for prot in protein_dict.values()])
+                + "$"
             )
+
+        self.digest_starts: np.ndarray
+        self.digest_stops: np.ndarray
         self.digest_starts, self.digest_stops = get_substring_indices(
             self.cat_protein_sequence, min_peptide_len, max_peptide_len
         )
@@ -99,17 +117,18 @@ class NonSpecificDigest:
             - 'sequence': Randomly sampled peptide sequences.
             - 'allele': A constant value 'random' for all rows.
         """
+        total_peptides: int = len(self.digest_starts)
+        if total_peptides == 0:
+            return pd.DataFrame(columns=["sequence", "allele"])
 
-        idxes = np.random.randint(0, len(self.digest_starts), size=n)
-        df = pd.DataFrame(
-            [
-                self.cat_protein_sequence[start:stop]
-                for start, stop in zip(
-                    self.digest_starts[idxes], self.digest_stops[idxes], strict=False
-                )
-            ],
-            columns=["sequence"],
-        )
+        idxes: np.ndarray = np.random.randint(0, total_peptides, size=n)
+        sequences: list[str] = [
+            self.cat_protein_sequence[start:stop]
+            for start, stop in zip(
+                self.digest_starts[idxes], self.digest_stops[idxes], strict=False
+            )
+        ]
+        df: pd.DataFrame = pd.DataFrame(sequences, columns=["sequence"])
         df["allele"] = "random"
         return df
 
@@ -128,10 +147,12 @@ class NonSpecificDigest:
         Raises:
             IndexError: If any index in `idxes` is out of bounds.
         """
-
-        return [
-            self.cat_protein_sequence[start:stop]
-            for start, stop in zip(
-                self.digest_starts[idxes], self.digest_stops[idxes], strict=False
-            )
-        ]
+        try:
+            return [
+                self.cat_protein_sequence[start:stop]
+                for start, stop in zip(
+                    self.digest_starts[idxes], self.digest_stops[idxes], strict=False
+                )
+            ]
+        except IndexError as e:
+            raise IndexError(f"One or more indices are out of bounds: {e}") from e

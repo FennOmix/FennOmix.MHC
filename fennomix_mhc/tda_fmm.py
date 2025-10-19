@@ -1,9 +1,18 @@
+from typing import Any, Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import gamma as dgamma
 
+# Constants
+BIC_Max: float = 1e100
+Div_Zero: float = 1e-50
+Max_Iter: int = 30
 
-def gauss_pdf(X, u, sigma):
+
+def gauss_pdf(
+    X: np.ndarray | list[float] | float, u: float, sigma: float
+) -> np.ndarray:
     """Calculate Gaussian probability density function values for input array X.
 
     Args:
@@ -17,7 +26,9 @@ def gauss_pdf(X, u, sigma):
     return 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-0.5 * np.square((X - u) / sigma))
 
 
-def gamma_pdf(X, u, sigma):
+def gamma_pdf(
+    X: np.ndarray | list[float] | float, u: float, sigma: float
+) -> np.ndarray:
     """Calculate Gamma probability density function values using mean and std.
 
     The shape and scale parameters are derived from mean (u) and std (sigma).
@@ -33,11 +44,6 @@ def gamma_pdf(X, u, sigma):
     a = (u / sigma) ** 2
     scale = sigma**2 / u
     return dgamma.pdf(X, a=a, scale=scale)
-
-
-BIC_Max = 1e100
-Div_Zero = 1e-50
-Max_Iter = 30
 
 
 class TDA_fmm:
@@ -58,7 +64,9 @@ class TDA_fmm:
         sigma: Learned standard deviations for each component.
     """
 
-    def __init__(self, n_components, external_model=None):
+    def __init__(
+        self, n_components: int, external_model: Optional["TDA_fmm"] = None
+    ) -> None:
         """Initializes the TDA_fmm model.
 
         Args:
@@ -66,19 +74,30 @@ class TDA_fmm:
             external_model: Pre-fitted decoy model. If None, models decoy;
                            if provided, models target with decoy as a component.
         """
-        self.n_components = n_components
-        self.external_model = external_model
-        self.max_iter = Max_Iter
+        self.n_components: int = n_components
+        self.external_model: "TDA_fmm" | None = external_model
+        self.max_iter: int = Max_Iter
         if external_model is None:
-            self.main_pdf = gauss_pdf
+            self.main_pdf: Any = (
+                gauss_pdf  # Callable[[ArrayLike, float, float], np.ndarray]
+            )
         else:
-            self.main_pdf = gauss_pdf
-        self.helper_pdf = gauss_pdf
+            self.main_pdf: Any = gauss_pdf
+        self.helper_pdf: Any = gauss_pdf
 
-    def __call__(self, X):
+        # Initialize parameters; set to None until fit()
+        self.weights: np.ndarray | None = None
+        self.mu: np.ndarray | None = None
+        self.sigma: np.ndarray | None = None
+
+    def __call__(self, X: np.ndarray | list[float]) -> np.ndarray:
         return self.pdf_mix(X)
 
-    def pep(self, X, external_pdf=None):
+    def pep(
+        self,
+        X: np.ndarray | list[float],
+        external_pdf: np.ndarray | None = None,
+    ) -> np.ndarray:
         """Estimates Posterior Error Probabilities (PEP).
 
         PEP = pi0 * f_decoy(x) / f_mixture(x)
@@ -97,18 +116,18 @@ class TDA_fmm:
             external_pdf = self.external_model.pdf(X)
         return self.weights[-1] * external_pdf / self.pdf_mix(X, external_pdf)
 
-    def get_pi0(self):
+    def get_pi0(self) -> float:
         """Returns the estimated proportion of decoy (null) components in the mixture.
 
         Returns:
             pi0 value (between 0 and 1). Returns 0 if model not fitted or no external model.
         """
         if self.weights is None or self.external_model is None:
-            return 0
+            return 0.0
         else:
-            return self.weights[-1]
+            return float(self.weights[-1])
 
-    def pdf(self, X):
+    def pdf(self, X: np.ndarray | list[float]) -> np.ndarray:
         """Computes the PDF of the main mixture components (excluding external model).
 
         Args:
@@ -119,16 +138,21 @@ class TDA_fmm:
         """
         if self.weights is None:
             return np.zeros(len(X))
-        X = np.array(X)
-        pdf = np.zeros((self.n_components, X.shape[0]))
+        X_arr: np.ndarray = np.array(X)
+        n_samples: int = X_arr.shape[0]
+        pdf: np.ndarray = np.zeros((self.n_components, n_samples))
         for i in range(0, self.n_components):
             if i == 0:
-                pdf[i, :] = self.main_pdf(X, u=self.mu[i], sigma=self.sigma[i])
+                pdf[i, :] = self.main_pdf(X_arr, u=self.mu[i], sigma=self.sigma[i])
             else:
-                pdf[i, :] = self.helper_pdf(X, u=self.mu[i], sigma=self.sigma[i])
+                pdf[i, :] = self.helper_pdf(X_arr, u=self.mu[i], sigma=self.sigma[i])
         return np.dot(self.weights[: self.n_components], pdf)
 
-    def pdf_mix(self, X, external_pdf=None):
+    def pdf_mix(
+        self,
+        X: np.ndarray | list[float],
+        external_pdf: np.ndarray | None = None,
+    ) -> np.ndarray:
         """Computes the full mixture PDF, including external model if present.
 
         f_mixture(x) = pi0 * f_decoy(x) + (1-pi0) * f_target(x)
@@ -142,17 +166,17 @@ class TDA_fmm:
         """
         if self.weights is None:
             return np.zeros(len(X))
-        X = np.array(X)
+        X_arr: np.ndarray = np.array(X)
         if self.external_model is not None:
             if external_pdf is None:
-                external_pdf = self.external_model.pdf(X)
-            pdf0 = external_pdf * self.get_pi0()
-            pdf1 = self.pdf(X) * (1 - self.get_pi0())
+                external_pdf = self.external_model.pdf(X_arr)
+            pdf0: np.ndarray = external_pdf * self.get_pi0()
+            pdf1: np.ndarray = self.pdf(X_arr) * (1 - self.get_pi0())
             return pdf0 + pdf1
         else:
-            return self.pdf(X)
+            return self.pdf(X_arr)
 
-    def loglik_BIC(self, X):
+    def loglik_BIC(self, X: np.ndarray | list[float]) -> tuple[float, float]:
         """Computes log-likelihood and Bayesian Information Criterion (BIC).
 
         BIC = -2 * loglik + num_params * log(n)
@@ -164,13 +188,19 @@ class TDA_fmm:
             A tuple of (log-likelihood, BIC). Returns (0, 0) if model not fitted.
         """
         if self.weights is None:
-            return 0, 0
-        _has_external = 1 if self.external_model is not None else 0
-        loglik = np.sum(np.log(self.pdf(X)))
-        BIC = -2 * loglik + (self.n_components + _has_external) * np.log(len(X))
+            return 0.0, 0.0
+        _has_external: int = 1 if self.external_model is not None else 0
+        loglik: float = float(np.sum(np.log(self.pdf(X))))
+        n: int = len(X)
+        BIC: float = -2 * loglik + (self.n_components + _has_external) * np.log(n)
         return loglik, BIC
 
-    def plot(self, title, plot_scores, false_scores=None):
+    def plot(
+        self,
+        title: str,
+        plot_scores: np.ndarray | list[float],
+        false_scores: np.ndarray | list[float] | None = None,
+    ) -> None:
         """Plots the fitted mixture model against histogram of scores.
 
         If an external model exists and false_scores are provided, plots:
@@ -185,61 +215,60 @@ class TDA_fmm:
             plot_scores: Scores to plot (e.g., target scores).
             false_scores: Optional decoy scores for comparison.
         """
-        binsize = 40
-        lw = 1
+        binsize: int = 40
+        lw: float = 1.0
 
         if self.external_model is not None and false_scores is not None:
-            pass
             self.external_model.plot(title, false_scores)
-            scores = np.array(plot_scores)
+            scores: np.ndarray = np.array(plot_scores)
             binsize *= 2
 
-            step = 0.001
+            step: float = 0.001
             plt.figure()
             pp = plt.subplot()
 
             n, bins, patches = pp.hist(
                 scores, binsize, density=1, facecolor="green", alpha=0.75
             )
-            bins = np.arange(scores.min(), scores.max(), step)
-            dis = self.pdf_mix(bins)
-            ratio = np.mean(n) / np.mean(dis)
+            bins_arr: np.ndarray = np.arange(scores.min(), scores.max(), step)
+            dis: np.ndarray = self.pdf_mix(bins_arr)
+            ratio: float = np.mean(n) / np.mean(dis)
             dis = dis * ratio
-            pp.plot(bins, dis, "r--", linewidth=lw)
+            pp.plot(bins_arr, dis, "r--", linewidth=lw)
             pp.set_title(title + " target")
 
             # plot false and true distribution separately
             plt.figure()
             pp = plt.subplot()
-            dis_false = self.external_model.pdf(bins)
-            dis_true = self.pdf(bins)
+            dis_false: np.ndarray = self.external_model.pdf(bins_arr)
+            dis_true: np.ndarray = self.pdf(bins_arr)
             pp.hist(scores, binsize, density=1, facecolor="green", alpha=0.75)
             dis_false = dis_false * ratio * self.get_pi0()
             dis_true = dis_true * ratio * (1 - self.get_pi0())
-            pp.plot(bins, dis_true, "b--", linewidth=lw)
-            pp.plot(bins, dis_false, "r--", linewidth=lw)
+            pp.plot(bins_arr, dis_true, "b--", linewidth=lw)
+            pp.plot(bins_arr, dis_false, "r--", linewidth=lw)
             pp.set_title(
                 title
                 + rf" target mixture ($\pi_0$={self.get_pi0():.2f}, $\pi_1$={1 - self.get_pi0():.2f})"
             )
 
         else:
-            scores = np.array(plot_scores)
+            scores: np.ndarray = np.array(plot_scores)
 
-            step = 0.1
+            step: float = 0.1
             plt.figure()
             pp = plt.subplot()
 
             n, bins, patches = pp.hist(
                 scores, binsize, density=1, facecolor="blue", alpha=0.75
             )
-            bins = np.arange(scores.min(), scores.max(), step)
-            dis = self.pdf(bins)
+            bins_arr: np.ndarray = np.arange(scores.min(), scores.max(), step)
+            dis: np.ndarray = self.pdf(bins_arr)
             dis = dis * np.mean(n) / np.mean(dis)
-            pp.plot(bins, dis, "r--", linewidth=lw)
+            pp.plot(bins_arr, dis, "r--", linewidth=lw)
             pp.set_title(title + " decoy")
 
-    def fit(self, X):
+    def fit(self, X: np.ndarray | list[float]) -> None:
         """Fits the FMM model using Expectation-Maximization (EM) algorithm.
 
         Args:
@@ -248,75 +277,69 @@ class TDA_fmm:
         if len(X) < 10:
             self.weights = None
             return
-        X = np.array(X)
-        self.mu = np.min(X) + (np.max(X) - np.min(X)) / (
-            self.n_components + 1
-        ) * np.array(range(1, self.n_components + 1))
-        self.sigma = np.ones(self.n_components) * np.var(X)
+        X_arr: np.ndarray = np.array(X)
+        n_components: int = self.n_components
+
+        # Initialize mu and sigma
+        self.mu = np.min(X_arr) + (np.max(X_arr) - np.min(X_arr)) / (
+            n_components + 1
+        ) * np.array(range(1, n_components + 1))
+        self.sigma = np.ones(n_components) * np.var(X_arr)
 
         if self.external_model is not None:
-            d0 = self.external_model.pdf(X)
-            _has_external = 1
+            d0: np.ndarray = self.external_model.pdf(X_arr)
+            _has_external: int = 1
         else:
             _has_external = 0
 
-        ## weights is pi, i.e. component probabilities, including the probability of external_model.
-        self.weights = np.ones(self.n_components + _has_external) / (
-            self.n_components + _has_external
+        self.weights = np.ones(n_components + _has_external) / (
+            n_components + _has_external
         )
 
-        # Response of each component (including the external model),
-        # the response: $p_{ik} = w_k*f_k(X_i) / sum(w.*f)$, where k is the kth component.
-        post_prob = np.zeros((self.n_components + _has_external, X.shape[0]))
+        post_prob: np.ndarray = np.zeros((n_components + _has_external, X_arr.shape[0]))
 
         for __iter in range(self.max_iter):
-            ## E-step
-            dens = np.zeros((self.n_components + _has_external, X.shape[0]))
+            dens: np.ndarray = np.zeros((n_components + _has_external, X_arr.shape[0]))
 
-            # The external pdf is in the last
             if self.external_model is not None:
                 dens[-1, :] = d0
 
-            # Estimate pdf value of X for each component.
-            for i in range(0, self.n_components):
+            for i in range(0, n_components):
                 if i == 0:
-                    dens[i, :] = self.main_pdf(X, u=self.mu[i], sigma=self.sigma[i])
+                    dens[i, :] = self.main_pdf(X_arr, u=self.mu[i], sigma=self.sigma[i])
                 else:
-                    dens[i, :] = self.helper_pdf(X, u=self.mu[i], sigma=self.sigma[i])
+                    dens[i, :] = self.helper_pdf(
+                        X_arr, u=self.mu[i], sigma=self.sigma[i]
+                    )
 
-            # Store the sum response, i.e. sum(w.*f), for each X_i
-            total_prob = np.dot(self.weights, dens)
-            # Calculate response value for each X_i
-            for i in range(self.n_components + _has_external):
+            total_prob: np.ndarray = np.dot(self.weights, dens)
+            total_prob[total_prob <= 0] = Div_Zero  # Avoid division by zero
+
+            for i in range(n_components + _has_external):
                 post_prob[i, :] = self.weights[i] * dens[i, :] / total_prob
 
-            ## M-step
-            sum_prob = np.sum(post_prob, axis=1)
+            sum_prob: np.ndarray = np.sum(post_prob, axis=1)
             sum_prob[sum_prob == 0] = 1e-12
-            # sum all response (R_i) for X_i to estimate the weight of each component
-            new_weights = sum_prob / np.sum(sum_prob)
 
-            # New mean is the weighted mean of the responses.
-            new_mu = (
-                np.dot(post_prob[: self.mu.shape[0], :], X)
+            new_weights: np.ndarray = sum_prob / np.sum(sum_prob)
+
+            new_mu: np.ndarray = (
+                np.dot(post_prob[: self.mu.shape[0], :], X_arr)
                 / sum_prob[: self.mu.shape[0]]
             )
-            new_sigma = self.sigma.copy()
-            for i in range(self.n_components):
-                # New std is the weighted sqrt(variance) of the response
+            new_sigma: np.ndarray = self.sigma.copy()
+            for i in range(n_components):
                 new_sigma[i] = np.sqrt(
-                    np.dot(post_prob[i, :], np.square(X - self.mu[i])) / sum_prob[i]
+                    np.dot(post_prob[i, :], np.square(X_arr - self.mu[i])) / sum_prob[i]
                 )
 
-            # @Todo Check if the new parameters are legal (for example NaN value).
             if (
                 np.any(np.isnan(new_sigma))
                 or np.any(np.isnan(new_mu))
-                or (np.any(np.isinf(new_sigma)) or np.any(np.isinf(new_mu)))
-                or (
-                    np.any(np.array(new_sigma) <= Div_Zero)
-                    or np.any(np.array(new_mu) <= Div_Zero)
-                )
+                or np.any(np.isinf(new_sigma))
+                or np.any(np.isinf(new_mu))
+                or np.any(np.array(new_sigma) <= Div_Zero)
+                or np.any(np.array(new_mu) <= Div_Zero)
             ):
                 break
 
@@ -331,7 +354,9 @@ class DecoyModel(TDA_fmm):
     Uses a single Gaussian, optionally filtering outliers using sigma threshold.
     """
 
-    def __init__(self, gaussian_outlier_sigma, *args, **kwargs):
+    def __init__(
+        self, gaussian_outlier_sigma: float | None, *args: Any, **kwargs: Any
+    ) -> None:
         """Initializes the decoy model.
 
         Args:
@@ -339,11 +364,14 @@ class DecoyModel(TDA_fmm):
                                     are filtered before fitting.
             *args, **kwargs: Ignored, for compatibility.
         """
-        self.external_model = None
-        self.weights = np.array([1.0])
-        self.gaussian_outlier_sigma = gaussian_outlier_sigma
+        super().__init__(n_components=1)
+        self.external_model: TDA_fmm | None = None
+        self.weights: np.ndarray = np.array([1.0])
+        self.gaussian_outlier_sigma: float | None = gaussian_outlier_sigma
+        self.mu: float | None = None
+        self.sigma: float | None = None
 
-    def fit(self, X):
+    def fit(self, X: np.ndarray | list[float]) -> None:
         """Fits a single Gaussian to the decoy scores.
 
         Optionally filters left-tail outliers before fitting.
@@ -351,15 +379,18 @@ class DecoyModel(TDA_fmm):
         Args:
             X: Decoy scores.
         """
-        self.mu = np.mean(X)
-        self.sigma = np.std(X)
+        X_arr: np.ndarray = np.array(X)
+        self.mu = float(np.mean(X_arr))
+        self.sigma = float(np.std(X_arr))
 
-        if self.gaussian_outlier_sigma:
-            X = X[self.mu - self.gaussian_outlier_sigma * self.sigma < X]
-            self.mu = np.mean(X)
-            self.sigma = np.std(X)
+        if self.gaussian_outlier_sigma is not None:
+            threshold: float = self.mu - self.gaussian_outlier_sigma * self.sigma
+            X_filtered: np.ndarray = X_arr[X_arr > threshold]
+            if len(X_filtered) > 0:
+                self.mu = float(np.mean(X_filtered))
+                self.sigma = float(np.std(X_filtered))
 
-    def pdf(self, X):
+    def pdf(self, X: np.ndarray | list[float]) -> np.ndarray:
         """Computes Gaussian PDF for given scores.
 
         Args:
@@ -368,11 +399,16 @@ class DecoyModel(TDA_fmm):
         Returns:
             PDF values.
         """
-        self.data = X
-        return gauss_pdf(X, self.mu, self.sigma)
+        X_arr: np.ndarray = np.array(X)
+        return gauss_pdf(X_arr, self.mu, self.sigma)
 
 
-def select_best_fmm(target_scores, decoy_fmm, _max_component_=3, verbose=True):
+def select_best_fmm(
+    target_scores: np.ndarray | list[float],
+    decoy_fmm: "DecoyModel",
+    _max_component_: int = 3,
+    verbose: bool = True,
+) -> TDA_fmm:
     """Selects the best TDA_fmm model by BIC criterion.
 
     Fits models with 1 to `_max_component_` components and selects the one with lowest BIC.
@@ -386,7 +422,8 @@ def select_best_fmm(target_scores, decoy_fmm, _max_component_=3, verbose=True):
     Returns:
         Best-fitted TDA_fmm model (target model).
     """
-    best_target_BIC = BIC_Max
+    best_target_BIC: float = BIC_Max
+    best_fmm: TDA_fmm | None = None
     for n_component in range(1, _max_component_ + 1):
         target_fmm = TDA_fmm(n_component, external_model=decoy_fmm)
         target_fmm.fit(target_scores)
@@ -398,4 +435,5 @@ def select_best_fmm(target_scores, decoy_fmm, _max_component_=3, verbose=True):
             print(
                 f"[Target FMM] G={n_component:d}, BIC={BIC:f}, best BIC={best_target_BIC:f}"
             )
+    assert best_fmm is not None, "No valid model was selected"
     return best_fmm
