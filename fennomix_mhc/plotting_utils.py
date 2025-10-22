@@ -267,12 +267,31 @@ Turbo256 = (
 
 
 def fit_hla_umap_reducer(hla_embeds, random_state=1337):
+    """Fits a UMAP reducer on HLA embeddings.
+
+    Args:
+        hla_embeds: A 2D numpy array of shape (n_samples, n_features) containing HLA embeddings.
+        random_state: Random seed for reproducibility. Default is 1337.
+
+    Returns:
+        A fitted UMAP reducer object.
+    """
     hla_reducer = umap.UMAP(random_state=random_state)
     hla_reducer.fit(hla_embeds)
     return hla_reducer
 
 
 def transform_embeds_to_umap_df(hla_reducer, embeds, alleles):
+    """Transforms embeddings using a pre-fitted UMAP reducer into a 2D DataFrame.
+
+    Args:
+        hla_reducer: A fitted UMAP reducer object.
+        embeds: A 2D numpy array of shape (n_samples, n_features) to be transformed.
+        alleles: A sequence of allele names corresponding to each embedding.
+
+    Returns:
+        A pandas DataFrame with columns ['UMAP1', 'UMAP2', 'allele'].
+    """
     embedding = hla_reducer.transform(embeds)
     df = pd.DataFrame(embedding, columns=("UMAP1", "UMAP2"))
     df["allele"] = alleles
@@ -280,6 +299,16 @@ def transform_embeds_to_umap_df(hla_reducer, embeds, alleles):
 
 
 def transform_matrix_to_mds_df(matrix, labels, seed):
+    """Applies MDS transformation on a precomputed distance matrix.
+
+    Args:
+        matrix: A 2D square distance matrix of shape (n_samples, n_samples).
+        labels: A sequence of labels for each sample.
+        seed: Random state for reproducibility.
+
+    Returns:
+        A pandas DataFrame with columns ['MDS1', 'MDS2', 'label'].
+    """
     mds = MDS(
         n_components=2,
         random_state=seed,
@@ -293,6 +322,16 @@ def transform_matrix_to_mds_df(matrix, labels, seed):
 
 
 def transform_embeds_to_tSNE_df(embeds, labels, seed):
+    """Applies t-SNE transformation on high-dimensional embeddings.
+
+    Args:
+        embeds: A 2D numpy array of shape (n_samples, n_features).
+        labels: A sequence of labels for each sample.
+        seed: Random state for reproducibility.
+
+    Returns:
+        A pandas DataFrame with columns ['t-SNE 1', 't-SNE 2', 'label'].
+    """
     tsne = TSNE(
         n_components=2, random_state=seed, perplexity=30, learning_rate=200, n_iter=1000
     )
@@ -312,6 +351,21 @@ def plot_umap_df(
     image_height=600,
     save_as="",
 ):
+    """Creates an interactive UMAP scatter plot using Plotly.
+
+    Args:
+        df: Input DataFrame containing UMAP1, UMAP2, and metadata columns.
+        color_col: Column name to use for coloring points.
+        hover_col: Column name to display in hover tooltip.
+        size: Marker size.
+        jump_color: Whether to use spaced-out colors from Turbo256 palette.
+        image_width: Width of the output image in pixels.
+        image_height: Height of the output image in pixels.
+        save_as: Optional file path to save the image (e.g., "plot.png").
+
+    Returns:
+        A Plotly Figure object.
+    """
     factors = df[color_col].drop_duplicates().to_list()
     color_mapping = {}
     for i, factor in enumerate(factors):
@@ -369,6 +423,21 @@ def plot_motif_multi_mer(
     fig_width_per_kmer=4,
     fig_height=3,
 ):
+    """Plots sequence logos for multiple k-mers (lengths) of a given allele.
+
+    Args:
+        df: Input DataFrame with 'sequence' and allele columns.
+        allele_col: Name of the column containing allele identifiers.
+        allele: Specific allele to plot.
+        kmers: List of peptide lengths (k-mer sizes) to visualize.
+        axes: Optional matplotlib axes to plot on. If None, creates new subplots.
+        logo_scale: Scaling factor for information content in logos.
+        fig_width_per_kmer: Width per subplot in inches.
+        fig_height: Height of the entire figure in inches.
+
+    Returns:
+        A list of Logomaker Logo objects.
+    """
     df["nAA"] = df.sequence.str.len()
     df = df.drop_duplicates(
         [allele_col, "sequence"]
@@ -405,6 +474,19 @@ def plot_motif_multi_mer(
 
 
 def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
+    """Plots a sequence logo for a specific allele and k-mer length.
+
+    Args:
+        df: Input DataFrame with sequences and allele info.
+        allele_col: Column name for allele.
+        allele: Allele name to filter.
+        kmer: Length of peptide to analyze.
+        ax: Matplotlib axis to plot on. If None, uses current axis.
+        logo_scale: Scaling factor for motif information content.
+
+    Returns:
+        A Logomaker Logo object.
+    """
     motif_df = count_motif_bits(df, allele_col, allele, kmer, logo_scale=logo_scale)
     logo_plot = lm.Logo(
         motif_df,
@@ -417,6 +499,18 @@ def plot_motif(df, allele_col, allele, kmer, ax=None, logo_scale=20):
 
 
 def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
+    """Counts amino acid frequencies at each position and computes information content.
+
+    Args:
+        df: Input DataFrame with sequences.
+        allele_col: Column name for allele.
+        allele: Allele to filter.
+        kmer: Peptide length to consider.
+        logo_scale: Scaling factor for log-odds (controls logo height).
+
+    Returns:
+        A DataFrame of information content per position (rows) and amino acid (columns).
+    """
     df = df[(df[allele_col] == allele) & (df.nAA == kmer)]
     # print(f"allele={allele}, kmer={kmer}, n={len(df)}")
     data = np.zeros((kmer, 26), dtype=float)
@@ -435,6 +529,12 @@ def count_motif_bits(df, allele_col, allele, kmer, logo_scale=20):
 
 
 def adjust_axes(logo_plots, max_y):
+    """Adjusts y-axis limits of logo plots to a common maximum.
+
+    Args:
+        logo_plots: List of Logomaker Logo objects (or nested lists).
+        max_y: Target maximum y-value for all plots.
+    """
     for logos in logo_plots:
         if isinstance(logos, list):
             logos[0].ax.set_ylim(top=max_y)
@@ -449,6 +549,20 @@ def adjust_axes(logo_plots, max_y):
 
 
 def select_optimal_a_cover(a_to_b_map, uncovered_b, coverage_threshold, max_a_elements):
+    """Greedy selection of 'a' elements to maximize coverage of 'b' elements.
+
+    Implements a greedy set cover algorithm: selects 'a' such that their mapped 'b'
+    set covers the most uncovered elements iteratively.
+
+    Args:
+        a_to_b_map: Mapping from elements of set A to sets of elements in B.
+        uncovered_b: Initial set of uncovered elements in B.
+        coverage_threshold: Target fraction of B to cover (e.g., 0.9 for 90%).
+        max_a_elements: Maximum number of 'a' elements to select.
+
+    Returns:
+        A set of selected 'a' elements.
+    """
     total_b = len(uncovered_b)
     selected_a = set()
     current_coverage = 0.0

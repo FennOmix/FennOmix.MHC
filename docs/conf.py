@@ -37,6 +37,7 @@ extensions = [
     "sphinx.ext.linkcode",
     "sphinx.ext.viewcode",
     "sphinx.ext.autodoc",
+    "sphinx_autodoc_typehints",
     "autodocsumm",
     "nbsphinx",
     "myst_parser",
@@ -108,7 +109,15 @@ html_css_files = [
     "css/custom.css",
 ]
 
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
+
 autodoc_default_options = {
     "autosummary": True,
     "special-members": "__init__",  # Include __init__ methods.
+    "members": True,
+    "undoc-members": True,
+    "show-inheritance": True,
 }
